@@ -17,7 +17,8 @@
             [langohr.confirm       :as lco]
             [langohr.queue         :as lq]
             [langohr.exchange      :as le]
-            [langohr.basic         :as lb])
+            [langohr.basic         :as lb]
+            [jepsen.os.debian      :as debian])
   (:import (com.rabbitmq.client AlreadyClosedException
                                 ShutdownSignalException)))
 
@@ -25,30 +26,42 @@
   (reify db/DB
     (setup! [_ test node]
       (c/cd "/tmp"
-            (let [version "3.5.6"
+            (let [version "3.7.3"
                   file (str "rabbitmq-server_" version "-1_all.deb")]
               (when-not (cu/file? file)
-                (info "Fetching deb package")
-                (c/exec :wget (str "http://www.rabbitmq.com/releases/rabbitmq-server/v" version "/" file)))
+                (info node "Fetching deb package")
+                (c/exec :wget (str "https://dl.bintray.com/rabbitmq/all/rabbitmq-server/" version "/" file)))
 
               (c/su
+                (core/synchronize test)
                 ; Install package
                 (try (c/exec :dpkg-query :-l :rabbitmq-server)
                      (catch RuntimeException _
-                       (info "Installing rabbitmq")
-                       (c/exec :apt-get :install :-y :erlang-nox)
+                       (info node "Installing esl-erlang")
+                       (let [deb_file (cu/wget! "https://packages.erlang-solutions.com/erlang-solutions_1.0_all.deb")]
+                         (c/exec :dpkg :-i deb_file))
+                       (debian/update!)
+                       (debian/install [:esl-erlang
+                                        :socat
+                                        :adduser
+                                        :logrotate])
+                       ; (c/exec :apt-get :install :-y :erlang-nox)
+                       (info node "Installing rabbitmq")
                        (c/exec :dpkg :-i file)))
 
+                (core/synchronize test)
+
+                (c/exec :service :rabbitmq-server :stop)
                 ; Set cookie
                 (when-not (= "jepsen-rabbitmq"
                              (c/exec :cat "/var/lib/rabbitmq/.erlang.cookie"))
-                  (info "Setting cookie")
-                  (c/exec :service :rabbitmq-server :stop)
+                  (info node "Setting cookie")
                   (c/exec :echo "jepsen-rabbitmq"
                           :> "/var/lib/rabbitmq/.erlang.cookie"))
 
+                (core/synchronize test)
                 ; Update config
-                (info "uploading config")
+                (info node "uploading config")
                 (c/exec :echo
                         (-> "rabbitmq/rabbitmq.config" io/resource slurp)
                         :> "/etc/rabbitmq/rabbitmq.config")
@@ -91,11 +104,13 @@
 ;        (meh (c/exec :rabbitmqctl :stop_app))
 ;        (meh (c/exec :rabbitmqctl :force_reset))
 ;        (meh (c/exec :service :rabbitmq-server :stop))
+        (core/synchronize test)
         (info node "Nuking rabbit")
         (meh (c/exec :killall :-9 "beam.smp" "epmd"))
         (c/exec :rm :-rf "/var/lib/rabbitmq/mnesia/")
         (c/exec :service :rabbitmq-server :stop)
-        (info node "Rabbit dead")))))
+        (info node "Rabbit dead")
+        (core/synchronize test)))))
 
 (def queue "jepsen.queue")
 
