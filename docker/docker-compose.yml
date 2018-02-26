@@ -14,6 +14,7 @@ services:
       - n3
       - n4
       - n5
+      - n6
   node:
     container_name: jepsen-node
     build: ./node
@@ -39,3 +40,7 @@ services:
     extends: node
     container_name: jepsen-n5
     hostname: n5
+  n6:
+    extends: node
+    container_name: jepsen-n6
+    hostname: n6

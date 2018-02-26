@@ -1,6 +1,8 @@
 #!/bin/sh
 set -e # exit on an error
 
+eval "$(docker-machine env default)"
+
 ERROR(){
     /bin/echo -e "\e[101m\e[97m[ERROR]\e[49m\e[39m $@"
 }
@@ -91,7 +93,6 @@ fi
 exists docker || { ERROR "Please install docker (https://docs.docker.com/engine/installation/)"; exit 1; }
 exists docker-compose || { ERROR "Please install docker-compose (https://docs.docker.com/compose/install/)"; exit 1; }
 
-eval "$(docker-machine env default)"
 INFO "Running \`docker-compose build\`"
 docker-compose build
 
