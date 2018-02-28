@@ -128,46 +128,38 @@
 
   (invoke! [this test op]
     (case (:f op)
-      :enqueue ;(assoc op :type :ok)
-              (c/on "n6"
-                (c/cd "/opt/ra"
-                  (try
-                    (do
-                      (c/exec "./ra_fifo_cli" :enqueue
-                            :--message (:value op)
-                            :--nodes (make-nodes (:nodes test)))
-                      (info "Enqueued " op)
-                      (assoc op :type :ok))
-                    (catch Exception e
+      :enqueue  (c/on "n6"
+                  (c/cd "/opt/ra"
+                    (try
                       (do
-                        (info "Enqueue failed " op)
-                        (assoc op :type :fail))))))
+                        (c/exec "./ra_fifo_cli" :enqueue
+                              :--message (:value op)
+                              :--nodes (make-nodes (:nodes test)))
+                        (info "Enqueued " op)
+                        (assoc op :type :ok))
+                      (catch Exception e
+                        (do
+                          (info "Enqueue failed " op)
+                          (assoc op :type :fail))))))
 
-      :dequeue ;(assoc op :type :ok)
-                (dequeue! this test op)
+      :dequeue (dequeue! this test op)
 
-      :drain  ;(assoc op :type :ok :value :exhausted)
-              (do
-                 ; Note that this does more dequeues than strictly necessary
-                 ; owing to lazy sequence chunking.
-                 (let [shit (->> (repeat op)                  ; Explode drain into
-                              (map #(assoc % :f :dequeue)) ; infinite dequeues, then
-                              (map (partial dequeue! this test))  ; dequeue something
-                              (take-while op/ok?)  ; as long as stuff arrives,
-                              ; (interleave (repeat op))     ; interleave with invokes
-                              ; (drop 1)                     ; except the initial one
-                              (map (fn [completion]
-                                     (info "Completion " completion)
-                                     (log-op completion)
-                                     (core/conj-op! test completion)
-                                     (:value completion)))
-                              )]
-                    (info "Shit is " shit)
-                    (assoc op :type :ok :value shit))
-                 ; (assoc op :type :ok :value :exhausted)
-                 )
-
-              )))
+      :drain
+             ; Note that this does more dequeues than strictly necessary
+             ; owing to lazy sequence chunking.
+             (let [result (->> (repeat op)                  ; Explode drain into
+                          (map #(assoc % :f :dequeue)) ; infinite dequeues, then
+                          (map (partial dequeue! this test))  ; dequeue something
+                          (take-while op/ok?)  ; as long as stuff arrives,
+                          ; (interleave (repeat op))     ; interleave with invokes
+                          ; (drop 1)                     ; except the initial one
+                          (map (fn [completion]
+                                 (info "Completion " completion)
+                                 (log-op completion)
+                                 (core/conj-op! test completion)
+                                 (:value completion)))
+                          )]
+                (assoc op :type :ok :value result)))))
 
 (defn ra-test
   "FIXME: ra test"
