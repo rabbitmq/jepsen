@@ -18,6 +18,7 @@
             [langohr.queue         :as lq]
             [langohr.exchange      :as le]
             [langohr.basic         :as lb]
+            [langohr.consumers     :as lcons]
             [jepsen.os.debian      :as debian])
   (:import (com.rabbitmq.client AlreadyClosedException
                                 ShutdownSignalException)))
@@ -26,11 +27,11 @@
   (reify db/DB
     (setup! [_ test node]
       (c/cd "/tmp"
-            (let [version "3.7.3"
-                  file (str "rabbitmq-server_" version "-1_all.deb")]
+            (let [version "3.7.0"
+                  file "rabbitmq-server-generic-unix-3.7.0+rc.2.20.g7f36946.tar.xz"] ; (str "rabbitmq-server_" version "-1_all.deb")]
               (when-not (cu/file? file)
                 (info node "Fetching deb package")
-                (c/exec :wget (str "https://dl.bintray.com/rabbitmq/all/rabbitmq-server/" version "/" file)))
+                (c/exec :wget "https://s3-eu-west-1.amazonaws.com/rabbitmq-share/builds/rabbitmq-server-generic-unix-3.7.0%2Brc.2.20.g7f36946.tar.xz")); (str "https://dl.bintray.com/rabbitmq/all/rabbitmq-server/" version "/" file)))
 
               (c/su
                 (core/synchronize test)
@@ -138,19 +139,50 @@
             (try (rmq/close ~ch)
                  (catch AlreadyClosedException _#))))))
 
-(defrecord QueueClient [conn]
+(defn subscribe!
+  "Subscribe and put all received values"
+  [promise_box ch]
+  ; Make sure messages are received one-by-one, so we can use promise to communicate
+  (lb/qos ch 1)
+  (let [handler (fn [ch {:keys [delivery-tag]} ^bytes payload]
+                  (let [unboxed_promise (deref promise_box)
+                        value (codec/decode payload)]
+                     (if (realized? unboxed_promise)
+                       (throw (RuntimeException. "Delivery promise should be empty! Check QOS prefetch"))
+                       (deliver unboxed_promise {:tag delivery-tag, :value value}))))]
+    (lcons/subscribe
+      ch queue
+      handler
+      {:auto-ack false})))
+
+(defn dequeue_from_promise!
+  "Get a message from a promise, which subscribe handler should put values in
+  and acknowledge it"
+  [promise_box ch op]
+
+  (timeout 5000 (assoc op :type :fail :value :timeout)
+    (let [unboxed_promise (deref promise_box)
+          {delivery-tag :tag value :value} (deref unboxed_promise)]
+      ; Empty the promise in the promise box, so the next delivery be put there
+      (swap! promise_box (fn [_] (promise)))
+      (lb/ack ch delivery-tag)
+      (assoc op :type :ok :value value))))
+
+
+(defrecord QueueClient [conn promise_box]
   client/Client
   (setup! [_ test node]
     (let [conn (rmq/connect {:host (name node)})]
       (with-ch [ch conn]
         ; Initialize queue
         (lq/declare ch queue
-                    :durable     true
-                    :auto-delete false
-                    :exclusive   false))
+                    {:durable     true
+                     :auto-delete false
+                     :exclusive   false
+                     :x-queue-type "quorum"}))
 
       ; Return client
-      (QueueClient. conn)))
+      (QueueClient. conn (atom (promise)))))
 
   (teardown! [_ test]
     ; Purge
@@ -169,23 +201,27 @@
                    ; Empty string is the default exhange
                    (lb/publish ch "" queue
                                (codec/encode (:value op))
-                               :content-type  "application/edn"
-                               :mandatory     true
-                               :persistent    true)
+                               {:content-type  "application/edn"
+                                :mandatory     true
+                                :persistent    true})
 
                    ; Block until message acknowledged
                    (if (lco/wait-for-confirms ch 5000)
                      (assoc op :type :ok)
                      (assoc op :type :fail)))
 
-        :dequeue (dequeue! ch op)
+        :dequeue
+          (do
+            (subscribe! promise_box ch)
+            (dequeue_from_promise! promise_box ch op))
 
         :drain   (do
+                   (subscribe! promise_box ch)
                    ; Note that this does more dequeues than strictly necessary
                    ; owing to lazy sequence chunking.
                    (->> (repeat op)                  ; Explode drain into
                         (map #(assoc % :f :dequeue)) ; infinite dequeues, then
-                        (map (partial dequeue! ch))  ; dequeue something
+                        (map (partial dequeue_from_promise! promise_box ch))  ; dequeue something
                         (take-while op/ok?)  ; as long as stuff arrives,
                         (interleave (repeat op))     ; interleave with invokes
                         (drop 1)                     ; except the initial one
@@ -195,84 +231,84 @@
                         dorun)
                    (assoc op :type :ok :value :exhausted))))))
 
-(defn queue-client [] (QueueClient. nil))
+(defn queue-client [] (QueueClient. nil nil))
 
 ; https://www.rabbitmq.com/blog/2014/02/19/distributed-semaphores-with-rabbitmq/
 ; enqueued is shared state for whether or not we enqueued the mutex record
 ; held is independent state to store the currently held message
-(defrecord Semaphore [enqueued? conn ch tag]
-  client/Client
-  (setup! [_ test node]
-    (let [conn (rmq/connect {:host (name node)})]
-      (with-ch [ch conn]
-        (lq/declare ch "jepsen.semaphore"
-                    :durable true
-                    :auto-delete false
-                    :exclusive false)
+; (defrecord Semaphore [enqueued? conn ch tag]
+;   client/Client
+;   (setup! [_ test node]
+;     (let [conn (rmq/connect {:host (name node)})]
+;       (with-ch [ch conn]
+;         (lq/declare ch "jepsen.semaphore"
+;                     {:durable true
+;                      :auto-delete false
+;                      :exclusive false})
 
-        ; Enqueue a single message
-        (when (compare-and-set! enqueued? false true)
-          (lco/select ch)
-          (lq/purge ch "jepsen.semaphore")
-          (lb/publish ch "" "jepsen.semaphore" (byte-array 0))
-          (when-not (lco/wait-for-confirms ch 5000)
-            (throw (RuntimeException.
-                     "couldn't enqueue initial semaphore message!")))))
+;         ; Enqueue a single message
+;         (when (compare-and-set! enqueued? false true)
+;           (lco/select ch)
+;           (lq/purge ch "jepsen.semaphore")
+;           (lb/publish ch "" "jepsen.semaphore" (byte-array 0))
+;           (when-not (lco/wait-for-confirms ch 5000)
+;             (throw (RuntimeException.
+;                      "couldn't enqueue initial semaphore message!")))))
 
-      (Semaphore. enqueued? conn (atom (lch/open conn)) (atom nil))))
+;       (Semaphore. enqueued? conn (atom (lch/open conn)) (atom nil))))
 
-  (teardown! [_ test]
-    ; Purge
-    (meh (timeout 5000 nil
-                  (with-ch [ch conn]
-                    (lq/purge ch "jepsen.semaphore"))))
-    (meh (rmq/close @ch))
-    (meh (rmq/close conn)))
+;   (teardown! [_ test]
+;     ; Purge
+;     (meh (timeout 5000 nil
+;                   (with-ch [ch conn]
+;                     (lq/purge ch "jepsen.semaphore"))))
+;     (meh (rmq/close @ch))
+;     (meh (rmq/close conn)))
 
-  (invoke! [this test op]
-    (case (:f op)
-      :acquire (locking tag
-                 (if @tag
-                   (assoc op :type :fail :value :already-held)
+;   (invoke! [this test op]
+;     (case (:f op)
+;       :acquire (locking tag
+;                  (if @tag
+;                    (assoc op :type :fail :value :already-held)
 
-                   (timeout 5000 (assoc op :type :fail :value :timeout)
-                      (try
-                        ; Get a message but don't acknowledge it
-                        (let [dtag (-> (lb/get @ch "jepsen.semaphore" false)
-                                       first
-                                       :delivery-tag)]
-                          (if dtag
-                            (do (reset! tag dtag)
-                                (assoc op :type :ok :value dtag))
-                            (assoc op :type :fail)))
+;                    (timeout 5000 (assoc op :type :fail :value :timeout)
+;                       (try
+;                         ; Get a message but don't acknowledge it
+;                         (let [dtag (-> (lb/get @ch "jepsen.semaphore" false)
+;                                        first
+;                                        :delivery-tag)]
+;                           (if dtag
+;                             (do (reset! tag dtag)
+;                                 (assoc op :type :ok :value dtag))
+;                             (assoc op :type :fail)))
 
-                        (catch ShutdownSignalException e
-                          (meh (reset! ch (lch/open conn)))
-                          (assoc op :type :fail :value (.getMessage e)))
+;                         (catch ShutdownSignalException e
+;                           (meh (reset! ch (lch/open conn)))
+;                           (assoc op :type :fail :value (.getMessage e)))
 
-                        (catch AlreadyClosedException e
-                          (meh (reset! ch (lch/open conn)))
-                          (assoc op :type :fail :value :channel-closed))))))
+;                         (catch AlreadyClosedException e
+;                           (meh (reset! ch (lch/open conn)))
+;                           (assoc op :type :fail :value :channel-closed))))))
 
-      :release (locking tag
-                 (if-not @tag
-                   (assoc op :type :fail :value :not-held)
-                   (timeout 5000 (assoc op :type :ok :value :timeout)
-                            (let [t @tag]
-                              (reset! tag nil)
-                              (try
-                                ; We're done now--we try to reject but it
-                                ; doesn't matter if we succeed or not.
-                                (lb/reject @ch t true)
-                                (assoc op :type :ok)
+;       :release (locking tag
+;                  (if-not @tag
+;                    (assoc op :type :fail :value :not-held)
+;                    (timeout 5000 (assoc op :type :ok :value :timeout)
+;                             (let [t @tag]
+;                               (reset! tag nil)
+;                               (try
+;                                 ; We're done now--we try to reject but it
+;                                 ; doesn't matter if we succeed or not.
+;                                 (lb/reject @ch t true)
+;                                 (assoc op :type :ok)
 
-                                (catch AlreadyClosedException e
-                                  (meh (reset! ch (lch/open conn)))
-                                  (assoc op :type :ok :value :channel-closed))
+;                                 (catch AlreadyClosedException e
+;                                   (meh (reset! ch (lch/open conn)))
+;                                   (assoc op :type :ok :value :channel-closed))
 
-                                (catch ShutdownSignalException e
-                                  (assoc op
-                                         :type :ok
-                                         :value (.getMessage e)))))))))))
+;                                 (catch ShutdownSignalException e
+;                                   (assoc op
+;                                          :type :ok
+;                                          :value (.getMessage e)))))))))))
 
-(defn mutex [] (Semaphore. (atom false) nil nil nil))
+; (defn mutex [] (Semaphore. (atom false) nil nil nil))
