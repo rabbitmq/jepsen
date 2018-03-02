@@ -28,10 +28,10 @@
     (setup! [_ test node]
       (c/cd "/tmp"
             (let [version "3.7.0"
-                  file "rabbitmq-server-generic-unix-3.7.0+rc.2.20.g7f36946.tar.xz"] ; (str "rabbitmq-server_" version "-1_all.deb")]
+                  file "rabbitmq-server_3.7.0+rc.2.20.g7f36946.dirty-1_all.deb"] ; (str "rabbitmq-server_" version "-1_all.deb")]
               (when-not (cu/file? file)
                 (info node "Fetching deb package")
-                (c/exec :wget "https://s3-eu-west-1.amazonaws.com/rabbitmq-share/builds/rabbitmq-server-generic-unix-3.7.0%2Brc.2.20.g7f36946.tar.xz")); (str "https://dl.bintray.com/rabbitmq/all/rabbitmq-server/" version "/" file)))
+                (c/exec :wget "https://s3-eu-west-1.amazonaws.com/rabbitmq-share/builds/rabbitmq-server_3.7.0%2Brc.2.20.g7f36946.dirty-1_all.deb")); (str "https://dl.bintray.com/rabbitmq/all/rabbitmq-server/" version "/" file)))
 
               (c/su
                 (core/synchronize test)
@@ -148,8 +148,12 @@
                   (let [unboxed_promise (deref promise_box)
                         value (codec/decode payload)]
                      (if (realized? unboxed_promise)
-                       (throw (RuntimeException. "Delivery promise should be empty! Check QOS prefetch"))
-                       (deliver unboxed_promise {:tag delivery-tag, :value value}))))]
+                        (do
+                          (info "Promise is realized " (deref unboxed_promise) " value is " value " delivery tag is " delivery-tag " channel " ch)
+                          (throw (RuntimeException. "Delivery promise should be empty! Check QOS prefetch")))
+                        (do
+                          (deliver unboxed_promise {:tag delivery-tag, :value value})))))]
+    (info "Subscribing")
     (lcons/subscribe
       ch queue
       handler
@@ -179,7 +183,8 @@
                     {:durable     true
                      :auto-delete false
                      :exclusive   false
-                     :x-queue-type "quorum"}))
+                     :x-queue-type "quorum"
+                     }))
 
       ; Return client
       (QueueClient. conn (atom (promise)))))
@@ -212,8 +217,14 @@
 
         :dequeue
           (do
-            (subscribe! promise_box ch)
-            (dequeue_from_promise! promise_box ch op))
+            (swap! promise_box (fn [_] (promise)))
+
+            (let [consumer-tag (subscribe! promise_box ch)
+                  result (dequeue_from_promise! promise_box ch op)]
+              (lb/cancel ch consumer-tag)
+              ; Cleanup delivered values
+              (swap! promise_box (fn [_] (promise)))
+              result))
 
         :drain   (do
                    (subscribe! promise_box ch)
