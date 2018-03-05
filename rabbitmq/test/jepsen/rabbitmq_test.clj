@@ -50,9 +50,9 @@
                  :name       "rabbitmq-simple-partition"
                  :os         debian/os
                  :db         db
-                 :nodes      ["n1", "n2", "n3"]
+                 ; :nodes      ["n1", "n2", "n3"]
                  :client     (queue-client)
-                 :nemesis    nemesis/noop ; (nemesis/partition-random-halves)
+                 :nemesis    (nemesis/partition-random-halves)
                  :model      (model/unordered-queue)
                  :checker    (checker/compose
                                {:queue       checker/queue

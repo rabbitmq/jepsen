@@ -171,6 +171,7 @@
           :db   (db "ra-fifo-cli")
           :client (RaClient. nil)
           :model      (model/unordered-queue)
+          :nemesis    (nemesis/partition-random-halves)
           :checker    (checker/compose
                         {:queue       (checker/queue)
                          :total-queue (checker/total-queue)})
