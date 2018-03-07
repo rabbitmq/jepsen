@@ -156,7 +156,6 @@
                           (map (fn [completion]
                                  (info "Completion " completion)
                                  (log-op completion)
-                                 (core/conj-op! test completion)
                                  (:value completion)))
                           )]
                 (assoc op :type :ok :value result)))))
