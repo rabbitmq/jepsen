@@ -36,7 +36,7 @@
   [node version]
   (debian/add-repo!
     :percona
-    "deb http://repo.percona.com/apt jessie main"
+    "deb https://repo.percona.com/apt jessie main"
     "keys.gnupg.net"
     "1C4CBDCDCD2EFD2A")
 

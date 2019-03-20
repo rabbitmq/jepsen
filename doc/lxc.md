@@ -159,7 +159,7 @@ systemctl restart sshd
 apt install sudo
 ```
 
-[Remove systemd](http://without-systemd.org/wiki/index.php/How_to_remove_systemd_from_a_Debian_jessie/sid_installation). After you install sysvinit-core and sysvinit-utils, you may have to restart the container with /lib/sysvinit/init argument to lxc-start before apt will allow you to remove systemd.
+[Remove systemd](https://without-systemd.org/wiki/index.php/How_to_remove_systemd_from_a_Debian_jessie/sid_installation). After you install sysvinit-core and sysvinit-utils, you may have to restart the container with /lib/sysvinit/init argument to lxc-start before apt will allow you to remove systemd.
 
 Detach from the container with Control+a q, and repeat for the remaining nodes.
 

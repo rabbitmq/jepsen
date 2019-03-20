@@ -1,6 +1,6 @@
 (ns jepsen.mongodb-smartos.transfer
   "Simulates bank account transfers between N accounts, as per
-  From http://docs.mongodb.org/manual/tutorial/perform-two-phase-commits/"
+  From https://docs.mongodb.org/manual/tutorial/perform-two-phase-commits/"
   (:refer-clojure :exclude [read])
   (:require [clojure [pprint :refer :all]
                      [string :as str]]

@@ -1,8 +1,8 @@
 (defproject jepsen.hazelcast-server "0.1.0-SNAPSHOT"
   :description "A basic Hazelcast server"
-  :url "http://example.com/FIXME"
+  :url "https://example.com/FIXME"
   :license {:name "Eclipse Public License"
-            :url "http://www.eclipse.org/legal/epl-v10.html"}
+            :url "https://www.eclipse.org/legal/epl-v10.html"}
   :source-paths ["src"]
   :java-source-paths ["java"]
   :dependencies [[org.clojure/clojure "1.8.0"]

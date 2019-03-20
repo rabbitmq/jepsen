@@ -36,7 +36,7 @@ Verschlimmbesserung: a library for talking to etcd.
 (defproject jepsen.etcdemo "0.1.0-SNAPSHOT"
   :description "A Jepsen test for etcd"
   :license {:name "Eclipse Public License"
-            :url "http://www.eclipse.org/legal/epl-v10.html"}
+            :url "https://www.eclipse.org/legal/epl-v10.html"}
   :main jepsen.etcdemo
   :dependencies [[org.clojure/clojure "1.9.0"]
                  [jepsen "0.1.8"]
@@ -262,7 +262,7 @@ how to run those commands. We're merging those maps together with `merge`.
 ```bash
 $ lein run serve
 13:29:21.425 [main] INFO  jepsen.web - Web server running.
-13:29:21.428 [main] INFO  jepsen.cli - Listening on http://0.0.0.0:8080/
+13:29:21.428 [main] INFO  jepsen.cli - Listening on https://0.0.0.0:8080/
 ```
 
 We can open `http://localhost:8080` in a web browser to explore the history of

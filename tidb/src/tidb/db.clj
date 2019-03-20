@@ -85,8 +85,8 @@
     pd
     :--name                  (get-in tidb-map [node :pd])
     :--data-dir              (get-in tidb-map [node :pd])
-    :--client-urls           (str "http://0.0.0.0:" client-port)
-    :--peer-urls             (str "http://0.0.0.0:" peer-port)
+    :--client-urls           (str "https://0.0.0.0:" client-port)
+    :--peer-urls             (str "https://0.0.0.0:" peer-port)
     :--advertise-client-urls (client-url node)
     :--advertise-peer-urls   (peer-url node)
     :--initial-cluster       (initial-cluster test)
@@ -141,15 +141,15 @@
 
         ; ./bin/pd-server --name=pd1
         ;                 --data-dir=pd1
-        ;                 --client-urls="http://0.0.0.0:2379"
-        ;                 --peer-urls="http://0.0.0.0:2380"
-        ;                 --advertise-client-urls="http://n1:2379"
-        ;                 --advertise-peer-urls="http://n1:2380"
-        ;                 --initial-cluster="pd1=http://n1:2380, \
-        ;                                    pd2=http://n2:2380, \
-        ;                                    pd3=http://n3:2380, \
-        ;                                    pd4=http://n4:2380, \
-        ;                                    pd5=http://n5:2380" \
+        ;                 --client-urls="https://0.0.0.0:2379"
+        ;                 --peer-urls="https://0.0.0.0:2380"
+        ;                 --advertise-client-urls="https://n1:2379"
+        ;                 --advertise-peer-urls="https://n1:2380"
+        ;                 --initial-cluster="pd1=https://n1:2380, \
+        ;                                    pd2=https://n2:2380, \
+        ;                                    pd3=https://n3:2380, \
+        ;                                    pd4=https://n4:2380, \
+        ;                                    pd5=https://n5:2380" \
         ;                 --log-file=pd.log
         (cu/start-daemon!
           {:logfile pdlogfile
@@ -159,8 +159,8 @@
           pd
           :--name                  (get-in tidb-map [node :pd])
           :--data-dir              (get-in tidb-map [node :pd])
-          :--client-urls           (str "http://0.0.0.0:" client-port)
-          :--peer-urls             (str "http://0.0.0.0:" peer-port)
+          :--client-urls           (str "https://0.0.0.0:" client-port)
+          :--peer-urls             (str "https://0.0.0.0:" peer-port)
           :--advertise-client-urls (client-url node)
           :--advertise-peer-urls   (peer-url node)
           :--initial-cluster       (initial-cluster test)

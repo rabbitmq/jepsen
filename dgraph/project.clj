@@ -1,8 +1,8 @@
 (defproject jepsen.dgraph "0.1.0-SNAPSHOT"
   :description "FIXME: write description"
-  :url "http://example.com/FIXME"
+  :url "https://example.com/FIXME"
   :license {:name "Eclipse Public License"
-            :url "http://www.eclipse.org/legal/epl-v10.html"}
+            :url "https://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.9.0"]
                  [jepsen "0.1.9-SNAPSHOT"]
                  [clj-http "3.7.0"]

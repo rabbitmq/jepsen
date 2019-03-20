@@ -56,7 +56,7 @@
 (defn db
   "Sets up and tears down Chronos. You can get versions from
 
-      curl http://repos.mesosphere.com/debian/dists/wheezy/main/binary-amd64/Packages.bz2 | bunzip2 | egrep '^Package:|^Version:' | paste - - | sort"
+      curl https://repos.mesosphere.com/debian/dists/wheezy/main/binary-amd64/Packages.bz2 | bunzip2 | egrep '^Package:|^Version:' | paste - - | sort"
   [mesos-version chronos-version]
   (let [mesosphere (mesosphere/db mesos-version)]
     (reify db/DB

@@ -269,7 +269,7 @@
   (c/su
     (debian/add-repo!
       "backports"
-      "deb http://http.debian.net/debian jessie-backports main")
+      "deb http://cdn-fastly.deb.debian.org/debian jessie-backports main")
       (c/exec :apt-get :update)
       (c/exec :apt-get :install :-y :-t :jessie-backports "openjdk-8-jdk")
       (c/exec :update-java-alternatives :--set "java-1.8.0-openjdk-amd64")

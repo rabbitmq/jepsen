@@ -36,7 +36,7 @@
   [node version]
   (debian/add-repo!
     :galera
-    "deb http://sfo1.mirrors.digitalocean.com/mariadb/repo/10.0/debian jessie main"
+    "deb http://sfo1.mirrors.digitalocean.com/mariadb/repo/10.0/debian/ jessie main"
     "keyserver.ubuntu.com"
     "0xcbcb082a1bb943db")
 

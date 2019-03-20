@@ -1,10 +1,10 @@
 (defproject jepsen.crate "0.1.0-SNAPSHOT"
   :description "FIXME: write description"
   :main jepsen.crate.runner
-  :url "http://example.com/FIXME"
+  :url "https://example.com/FIXME"
   :license {:name "Eclipse Public License"
-            :url "http://www.eclipse.org/legal/epl-v10.html"}
-  :repositories [["bintray" "http://dl.bintray.com/crate/crate"]]
+            :url "https://www.eclipse.org/legal/epl-v10.html"}
+  :repositories [["bintray" "https://dl.bintray.com/crate/crate"]]
   :jvm-opts ["-Xmx32g"
              "-XX:+UseConcMarkSweepGC"
              "-XX:+UseParNewGC"

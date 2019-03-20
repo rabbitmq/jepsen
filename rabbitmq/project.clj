@@ -2,7 +2,7 @@
   :description "RabbitMQ tests for Jepsen"
   :url "https://github.com/aphyr/jepsen"
   :license {:name "Eclipse Public License"
-            :url "http://www.eclipse.org/legal/epl-v10.html"}
+            :url "https://www.eclipse.org/legal/epl-v10.html"}
   :main jepsen.rabbitmq
   :jvm-opts ["-Dcom.sun.management.jmxremote"]
   :dependencies [[org.clojure/clojure "1.9.0"]

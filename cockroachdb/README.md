@@ -1,7 +1,7 @@
 # Jepsen tests for CockroachDB
 
 [CockroachDB](https://github.com/cockroachdb/cockroach) is a new distributed
-database engine developed at [Cockroach Labs](http://www.cockroachlabs.com/).
+database engine developed at [Cockroach Labs](https://www.cockroachlabs.com/).
 
 [Jepsen](https://github.com/aphyr/jepsen) is a testing framework for networked
 databases, developed by Kyle 'Aphyr' Kingsbury to exercise and
@@ -211,7 +211,7 @@ How to get there:
 
 1. ensure Sun/Oracle's JDK 8 is installed on your Jepsen host, and install leiningen__.
 
-   .. __: http://leiningen.org/
+   .. __: https://leiningen.org/
 
 2. configure a 5-node CockroachDB cluster, for example using the
    configuration in CockroachDB's ``cloud/aws`` subdirectory.

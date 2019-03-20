@@ -620,7 +620,7 @@ discovery.zen.fd.ping_interval: 1s
 #
 # If you have your own compatible implementation of the EC2 API service you
 # can set the enpoint that should be used.
-#cloud.aws.ec2.endpoind: http://example.com/endpoint
+#cloud.aws.ec2.endpoind: https://example.com/endpoint
 
 #/////////////////////////////// Azure Discovery /////////////////////////////
 
@@ -862,7 +862,7 @@ es.api.enabled: true
 # While only "http", "https" and "ftp" need to be listed here for usage in
 # URL repsoitories.
 # "file" urls must be prefixed with an entry configured in ``path.repo``
-#repositories.url.allowed_urls: ["http://example.org/root/*", "https://*.mydomain.com/*?*#*"]
+#repositories.url.allowed_urls: ["https://example.org/root/*", "https://*.mydomain.com/*?*#*"]
 
 
 ###################### POSTGRES WIRE PROTOCOL SUPPORT ########################

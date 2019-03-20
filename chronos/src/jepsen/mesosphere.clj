@@ -26,7 +26,7 @@
 (defn install!
   [test node version]
   (debian/add-repo! :mesosphere
-                    "deb http://repos.mesosphere.io/debian wheezy main"
+                    "deb https://repos.mesosphere.io/debian wheezy main"
                     "keyserver.ubuntu.com"
                     "E56151BF")
   (debian/install {:mesos version})
@@ -133,7 +133,7 @@
 (defn db
   "Installs mesos. You can get versions from
 
-      curl http://repos.mesosphere.com/ubuntu/dists/precise/main/binary-amd64/Packages.bz2 | bunzip2 | egrep '^Package:|^Version:' | paste - - | sort"
+      curl https://repos.mesosphere.com/ubuntu/dists/precise/main/binary-amd64/Packages.bz2 | bunzip2 | egrep '^Package:|^Version:' | paste - - | sort"
   [version]
   (let [zk (zk/db "3.4.5+dfsg-2")]
     (reify db/DB

@@ -5,7 +5,7 @@ also the basis for a [training class](https://jepsen.io/training) offered by
 Jepsen.
 
 If you aren't familiar with the Clojure language, we recommend you start with
-[Clojure for the Brave and True](http://www.braveclojure.com/), [Clojure From
+[Clojure for the Brave and True](https://www.braveclojure.com/), [Clojure From
 the Ground Up](https://aphyr.com/posts/301-clojure-from-the-ground-up-welcome),
 or any guide that works for you.
 

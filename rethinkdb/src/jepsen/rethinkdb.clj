@@ -54,7 +54,7 @@
   [node version]
   ; Install package
   (debian/add-repo! "rethinkdb"
-                    "deb http://download.rethinkdb.com/apt jessie main")
+                    "deb https://download.rethinkdb.com/apt jessie main")
   (c/su (c/exec :wget :-qO :- "https://download.rethinkdb.com/apt/pubkey.gpg" |
                 :apt-key :add :-))
   (debian/install {"rethinkdb" version})

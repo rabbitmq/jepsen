@@ -1,8 +1,8 @@
 (defproject jepsen.postgres-rds "0.1.0-SNAPSHOT"
   :description "Postgres RDS tests"
-  :url "http://jepsen.io"
+  :url "https://jepsen.io"
   :license {:name "Eclipse Public License"
-            :url "http://www.eclipse.org/legal/epl-v10.html"}
+            :url "https://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.7.0"]
                  [jepsen "0.0.7-SNAPSHOT"]
                  [org.clojure/java.jdbc "0.4.1"]
