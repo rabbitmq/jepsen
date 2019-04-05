@@ -35,19 +35,16 @@
   (reify db/DB
     (setup! [_ test node]
       (c/cd "/tmp"
-            (meh (c/exec :killall :-9 "beam.smp" "epmd"))
             (info "Deleting rabbitmq")
-            (meh (c/exec :service :rabbitmq-server :stop))
-            (c/exec :rm :-rf "/var/lib/rabbitmq/mnesia")
+            (c/exec :rm :-rf "/tmp/rabbitmq*")
 
-            (let [uri "https://dl.bintray.com/rabbitmq/all-dev-qq/rabbitmq-server/0.0.0-alpha.98/rabbitmq-server_0.0.0~alpha.98-1_all.deb"
-                  file "rabbitmq-server_0.0.0~alpha.98-1_all.deb" ]
-              ; (c/exec :rm file)
+            (let [uri "https://github.com/rabbitmq/rabbitmq-server/releases/download/v3.8.0-beta.3/rabbitmq-server-generic-unix-3.8.0-beta.3.tar.xz" ]
 
               (c/su
+                (c/exec* "killall -q -9 'beam.smp' 'epmd' || true")
                 (try (c/exec* "erl -noshell -eval \"\\$2 /= hd(erlang:system_info(otp_release)) andalso halt(2).\" -run init stop")
                      (catch Exception e
-                       (info "caught " e)
+                       (info "Erlang not detected, installing it...")
                        (info "downloading esl dpkg")
                        (let [deb_file (cu/wget! "https://packages.erlang-solutions.com/erlang-solutions_1.0_all.deb")]
                          (c/exec :dpkg :-i deb_file))
@@ -57,55 +54,50 @@
                        (debian/install [:socat :esl-erlang]
                                        )))
 
-                (c/exec :rm :-rf "/var/lib/rabbitmq/mnesia")
-                (when-not (cu/exists? file)
-                  (cu/wget! uri true)
-                  ; prepare rabbitmq user and directories
-                  (info "ensure user rabbitmq")
-                  (cu/ensure-user! "rabbitmq")
-                  (c/exec :mkdir :-p "/var/lib/rabbitmq")
-                  (c/exec :mkdir :-p "/var/log/rabbitmq")
-                  (c/exec :mkdir :-p "/etc/rabbitmq")
-                  (c/exec :chmod :a+rwx "/var/lib/rabbitmq/")
-                  (c/exec :chmod :a+rwx "/var/log/rabbitmq/")
-                  (info "remove policy-rc.d file")
-                  (c/exec :rm :-f "/usr/sbin/policy-rc.d")
+                (info "Downloading RabbitMQ " uri)
+                (cu/install-archive! uri "/tmp/rabbitmq-server")
 
-                  ; Update config
-                  (let [p (core/primary test)]
-                    (let [r (if-not (= node p) (str "rabbit@" p) "")]
-                      (c/exec :echo (-> "rabbitmq/rabbitmq.config"
-                                        io/resource
-                                        slurp
-                                        (str/replace "$RMQ_NODE" r))
-                              :> "/etc/rabbitmq/rabbitmq.config")))
-                  (info "Installing rabbitmq " file)
-                  (c/exec :dpkg :-i :--no-triggers file)
-                  ; Set cookie
-                  (when-not (= "jepsen-rabbitmq"
-                               (c/exec :cat "/home/rabbitmq/.erlang.cookie"))
-                    (c/exec :echo "jepsen-rabbitmq"
-                            :> "/home/rabbitmq/.erlang.cookie"))
-                  )
-
-                ; (c/exec :service :rabbitmq-server :stop)
-                ; Ensure node is running
-                (info "Starting rabbitmq")
+                ; Update config
+                (c/exec :echo (-> "rabbitmq/rabbitmq.conf"
+                                  io/resource
+                                  slurp)
+                        :> "/tmp/rabbitmq-server/etc/rabbitmq/rabbitmq.conf")
+                (info "setting Erlang cookie")
+                (c/exec :echo "jepsen-rabbitmq"
+                        :> "/root/.erlang.cookie")
+                (c/exec :chmod :600 "/root/.erlang.cookie")        
+                
+                ; Start broker on first node
                 (let [p (core/primary test)]
                   (if (= node p)
-                    (c/exec :service :rabbitmq-server :start)))
+                    (do
+                      (info "Starting RabbitMQ on first node")
+                      (c/exec* "/tmp/rabbitmq-server/sbin/rabbitmq-server -detached")
+                    )
+                  )
+                )
                 ; wait for the primary to come up
+                (Thread/sleep 5000)
                 (core/synchronize test)
                 ; start the remaining nodes
                 (let [p (core/primary test)]
                   (if-not (= node p)
-                    (c/exec :service :rabbitmq-server :start)))
-
-                ; wait for all nodes to be clustered and ready
-                (c/exec :rabbitmqctl :await_online_nodes 4)
-                (core/synchronize test)
-
-                (info node "Rabbit ready")))))
+                    (do
+                      (info "Starting RabbitMQ")
+                      (c/exec* "/tmp/rabbitmq-server/sbin/rabbitmq-server -detached")
+                      (info "Waiting for 5 seconds")
+                      (Thread/sleep 5000)
+                      (info "Stopping app")
+                      (c/exec* "/tmp/rabbitmq-server/sbin/rabbitmqctl stop_app")    
+                      (info "Join cluster " (str "rabbit@" p))
+                      (c/exec* "/tmp/rabbitmq-server/sbin/rabbitmqctl" "join_cluster" (str "rabbit@" p))    
+                      (info "Starting app")
+                      (c/exec* "/tmp/rabbitmq-server/sbin/rabbitmqctl start_app")
+                      (info "App started")
+                    )
+                  )
+                )
+                ))))
 
 
 
@@ -117,8 +109,8 @@
     db/LogFiles
     (log-files [_ test node]
       [
-       (str "/var/log/rabbitmq/rabbit@" node ".log")
-       (str "/var/log/rabbitmq/log/crash.log")
+       (str "/tmp/rabbitmq-server/var/log/rabbitmq/rabbit@" node ".log")
+       (str "/tmp/rabbitmq-server/var/log/rabbitmq/log/crash.log")
        ] )))
 
 (def queue "jepsen.queue")
@@ -151,14 +143,14 @@
 (defrecord QueueClient
   [conn]
   client/Client
-  (open! [this test node]
+  (open! [client test node]
     (info "open! called for " node)
     (try
-      (assoc this :conn (rmq/connect {:host (name node)
+      (assoc client :conn (rmq/connect {:host (name node)
                                       :automatically-recover false}))
-    (catch Exception _ this))
+    (catch Exception _ client))
     )
-  (setup! [this test]
+  (setup! [client test]
     (with-ch [ch conn]
       ; Initialize queue
       (do
@@ -170,14 +162,14 @@
         ; give it all a little bit of time before issuing the first command
         (Thread/sleep 1000)
         (lq/purge ch queue)))
-    this)
+    client)
 
   (teardown! [_ test])
   ; there is nothing to tear down
   (close! [_ test]
       (meh (rmq/close conn)))
 
-  (invoke! [this test op]
+  (invoke! [client test op]
     (with-ch [ch conn]
       (case (:f op)
         :enqueue (do
@@ -215,89 +207,6 @@
 
 (defn queue-client [] (QueueClient. nil))
 
-; https://www.rabbitmq.com/blog/2014/02/19/distributed-semaphores-with-rabbitmq/
-; enqueued is shared state for whether or not we enqueued the mutex record
-; held is independent state to store the currently held message
-; (defrecord Semaphore [enqueued? conn ch tag]
-;   client/Client
-;   (open! [this test node]
-;     (assoc this :conn (rmq/connect {:host (name node)})))
-;   (setup! [test node]
-;     (let [conn (rmq/connect {:host (name node)})]
-;       (with-ch [ch conn]
-;         (lq/declare ch "jepsen.semaphore"
-;                     :durable true
-;                     :auto-delete false
-;                     :exclusive false)
-
-;         ; Enqueue a single message
-;         (when (compare-and-set! enqueued? false true)
-;           (lco/select ch)
-;           (lq/purge ch "jepsen.semaphore")
-;           (lb/publish ch "" "jepsen.semaphore" (byte-array 0))
-;           (when-not (lco/wait-for-confirms ch 5000)
-;             (throw (RuntimeException.
-;                      "couldn't enqueue initial semaphore message!")))))
-
-;       (Semaphore. enqueued? conn (atom (lch/open conn)) (atom nil))))
-
-;   (teardown! [_ test]
-;     ; Purge
-;     (meh (timeout 5000 nil
-;                   (with-ch [ch conn]
-;                     (lq/purge ch "jepsen.semaphore"))))
-;     (meh (rmq/close @ch))
-;     (meh (rmq/close conn)))
-;   (close! [_ test]
-
-;   (invoke! [this test op]
-;     (case (:f op)
-;       :acquire (locking tag
-;                  (if @tag
-;                    (assoc op :type :fail :value :already-held)
-
-;                    (timeout 5000 (assoc op :type :fail :value :timeout)
-;                       (try
-;                         ; Get a message but don't acknowledge it
-;                         (let [dtag (-> (lb/get @ch "jepsen.semaphore" false)
-;                                        first
-;                                        :delivery-tag)]
-;                           (if dtag
-;                             (do (reset! tag dtag)
-;                                 (assoc op :type :ok :value dtag))
-;                             (assoc op :type :fail)))
-
-;                         (catch ShutdownSignalException e
-;                           (meh (reset! ch (lch/open conn)))
-;                           (assoc op :type :fail :value (.getMessage e)))
-
-;                         (catch AlreadyClosedException e
-;                           (meh (reset! ch (lch/open conn)))
-;                           (assoc op :type :fail :value :channel-closed))))))
-
-;       :release (locking tag
-;                  (if-not @tag
-;                    (assoc op :type :fail :value :not-held)
-;                    (timeout 5000 (assoc op :type :ok :value :timeout)
-;                             (let [t @tag]
-;                               (reset! tag nil)
-;                               (try
-;                                 ; We're done now--we try to reject but it
-;                                 ; doesn't matter if we succeed or not.
-;                                 (lb/reject @ch t true)
-;                                 (assoc op :type :ok)
-
-;                                 (catch AlreadyClosedException e
-;                                   (meh (reset! ch (lch/open conn)))
-;                                   (assoc op :type :ok :value :channel-closed))
-
-;                                 (catch ShutdownSignalException e
-;                                   (assoc op
-;                                          :type :ok
-;                                          :value (.getMessage e)))))))))))
-
-; (defn mutex [] (Semaphore. (atom false) nil nil nil))
-
 (defn rabbit-test
   "Given an options map from the command-line runner (e.g. :nodes, :ssh,
   :concurrency, ...), constructs a test map."
@@ -309,7 +218,6 @@
           :db         (db)
           :client     (queue-client)
           :nemesis    (nemesis/partition-random-halves)
-          :model      (model/unordered-queue)
           :checker    (checker/total-queue)
           ; :checker    (checker/compose
           ;               {:queue       (checker/queue)
@@ -319,15 +227,15 @@
                              (gen/delay 1/10)
                              (gen/nemesis
                                (gen/seq
-                                 (cycle [(gen/sleep 60)
+                                 (cycle [(gen/sleep 10)
                                          {:type :info :f :start}
-                                         (gen/sleep 60)
+                                         (gen/sleep 10)
                                          {:type :info :f :stop}])))
-                             (gen/time-limit 180))
+                             (gen/time-limit 30))
                         (gen/nemesis
                           (gen/once {:type :info, :f :stop}))
                         (gen/log "waiting for recovery")
-                        (gen/sleep 60)
+                        (gen/sleep 10)
                         (gen/clients
                           (gen/each
                             (gen/once {:type :invoke
@@ -338,6 +246,5 @@
   "Handles command line arguments. Can either run a test, or a web server for
   browsing results."
   [& args]
-  (cli/run! (merge (cli/single-test-cmd {:test-fn rabbit-test})
-                   (cli/serve-cmd))
+  (cli/run! (cli/single-test-cmd {:test-fn rabbit-test})
             args))
