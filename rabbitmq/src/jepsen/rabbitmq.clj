@@ -189,21 +189,11 @@
 
         :dequeue (dequeue! ch op)
 
-        :drain   (do
-                   (info "doing DRAIN")
-                   ; Note that this does more dequeues than strictly necessary
-                   ; owing to lazy sequence chunking.
-                   (->> (repeat op)                  ; Explode drain into
-                        (map #(assoc % :f :dequeue)) ; infinite dequeues, then
-                        (map (partial dequeue! ch))  ; dequeue something
-                        (take-while op/ok?)          ; as long as stuff arrives,
-                        (interleave (repeat op))     ; interleave with invokes
-                        (drop 1)                     ; except the initial one
-                        (map (fn [completion]
-                               (log-op completion)
-                               (core/conj-op! test completion)))
-                        dorun)
-                   (assoc op :type :fail :value :exhausted))))))
+        :drain (loop [values []]
+          (let [v (dequeue! ch op)]
+          (if (= (:type v) :ok)
+            (recur (conj values (:value v)))
+            (assoc op :type :ok, :value values))))))))
 
 (defn queue-client [] (QueueClient. nil))
 
