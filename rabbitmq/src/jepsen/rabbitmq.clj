@@ -219,9 +219,6 @@
           :client     (queue-client)
           :nemesis    (nemesis/partition-random-halves)
           :checker    (checker/total-queue)
-          ; :checker    (checker/compose
-          ;               {:queue       (checker/queue)
-          ;                :total-queue (checker/total-queue)})
           :generator  (gen/phases
                         (->> (gen/queue)
                              (gen/delay 1/10)

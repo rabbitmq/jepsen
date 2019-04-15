@@ -17,11 +17,11 @@
   (:require [clojure.stacktrace :as trace]
             [clojure.string :as str]
             [clojure.pprint :refer [pprint]]
+            [dom-top.core :as dt :refer [real-pmap]]
             [knossos.op :as op]
             [knossos.history :as history]
             [jepsen.util :as util :refer [with-thread-name
                                           fcatch
-                                          real-pmap
                                           relative-time-nanos]]
             [jepsen.os :as os]
             [jepsen.db :as db]
@@ -31,16 +31,26 @@
             [jepsen.client :as client]
             [jepsen.nemesis :as nemesis]
             [jepsen.store :as store]
+            [tea-time.core :as tt]
             [slingshot.slingshot :refer [try+ throw+]])
   (:import (java.util.concurrent CyclicBarrier
-                                 CountDownLatch)))
+                                 CountDownLatch
+                                 TimeUnit)))
 
 (defn synchronize
-  "A synchronization primitive for tests. When invoked, blocks until all
-  nodes have arrived at the same point."
-  [test]
-  (or (= ::no-barrier (:barrier test))
-      (.await ^CyclicBarrier (:barrier test))))
+  "A synchronization primitive for tests. When invoked, blocks until all nodes
+  have arrived at the same point.
+
+  This is often used in IO-heavy DB setup code to ensure all nodes have
+  completed some phase of execution before moving on to the next. However, if
+  an exception is thrown by one of those threads, the call to `synchronize`
+  will deadlock! To avoid this, we include a default timeout of 60 seconds,
+  which can be overridden by passing an alternate timeout in seconds."
+  ([test]
+   (synchronize test 60))
+  ([test timeout-s]
+   (or (= ::no-barrier (:barrier test))
+       (.await ^CyclicBarrier (:barrier test) timeout-s TimeUnit/SECONDS))))
 
 (defn conj-op!
   "Add an operation to a tests's history, and returns the operation."
@@ -85,60 +95,66 @@
      (finally
        (control/on-nodes ~test (partial os/teardown! (:os ~test))))))
 
-(defn setup-primary!
-  "Given a test, sets up the database primary, if the DB supports it."
-  [test]
-  (when (satisfies? db/Primary (:db test))
-    (let [p (primary test)]
-      (control/with-session p (get-in test [:sessions p])
-        (db/setup-primary! (:db test) test p)))))
-
 (defn snarf-logs!
   "Downloads logs for a test."
   [test]
   ; Download logs
-  (when (satisfies? db/LogFiles (:db test))
-    (info "Snarfing log files")
-    (control/on-nodes test
-              (fn [test node]
-                (let [full-paths (db/log-files (:db test) test node)
-                      ; A map of full paths to short paths
-                      paths      (->> full-paths
-                                      (map #(str/split % #"/"))
-                                      util/drop-common-proper-prefix
-                                      (map (partial str/join "/"))
-                                      (zipmap full-paths))]
-                  (doseq [[remote local] paths]
-                    (info "downloading" remote "to" local)
-                    (try
-                      (control/download
-                        remote
-                        (.getCanonicalPath
-                          (store/path! test (name node)
-                                       ; strip leading /
-                                       (str/replace local #"^/" ""))))
-                      (catch java.io.IOException e
-                        (if (= "Pipe closed" (.getMessage e))
-                          (info remote "pipe closed")
-                          (throw e)))
-                      (catch java.lang.IllegalArgumentException e
-                        ; This is a jsch bug where the file is just being
-                        ; created
-                        (info remote "doesn't exist")))))))))
+  (locking snarf-logs!
+    (when (satisfies? db/LogFiles (:db test))
+      (info "Snarfing log files")
+      (control/on-nodes test
+        (fn [test node]
+          (let [full-paths (db/log-files (:db test) test node)
+                ; A map of full paths to short paths
+                paths      (->> full-paths
+                                (map #(str/split % #"/"))
+                                util/drop-common-proper-prefix
+                                (map (partial str/join "/"))
+                                (zipmap full-paths))]
+            (doseq [[remote local] paths]
+              (info "downloading" remote "to" local)
+              (try
+                (control/download
+                  remote
+                  (.getCanonicalPath
+                    (store/path! test (name node)
+                                 ; strip leading /
+                                 (str/replace local #"^/" ""))))
+                (catch java.io.IOException e
+                  (if (= "Pipe closed" (.getMessage e))
+                    (info remote "pipe closed")
+                    (throw e)))
+                (catch java.lang.IllegalArgumentException e
+                  ; This is a jsch bug where the file is just being
+                  ; created
+                  (info remote "doesn't exist"))))))))))
+
+(defmacro with-log-snarfing
+  "Evaluates body and ensures logs are snarfed afterwards. Will also download
+  logs in the event of JVM shutdown, so you can ctrl-c a test and get something
+  useful."
+  [test & body]
+  `(let [^Thread hook# (Thread.
+                         (bound-fn []
+                           (with-thread-name "Jepsen shutdown hook"
+                             (info "Downloading DB logs before JVM shutdown...")
+                             (snarf-logs! ~test)
+                             (store/update-symlinks! ~test))))]
+     (.. (Runtime/getRuntime) (addShutdownHook hook#))
+     (try
+       ~@body
+       (finally
+         (snarf-logs! ~test)
+         (store/update-symlinks! ~test)
+         (.. (Runtime/getRuntime) (removeShutdownHook hook#))))))
 
 (defmacro with-db
   "Wraps body in DB setup and teardown."
   [test & body]
   `(try
-     (control/on-nodes ~test (partial db/cycle! (:db ~test)))
-     (setup-primary! ~test)
-
-     ~@body
-     (catch Throwable t#
-       ; Emergency log dump!
-       (snarf-logs! ~test)
-       (store/update-symlinks! ~test)
-       (throw t#))
+     (with-log-snarfing ~test
+       (db/cycle! ~test)
+       ~@body)
      (finally
        (control/on-nodes ~test (partial db/teardown! (:db ~test))))))
 
@@ -152,98 +168,33 @@
   (run-worker!      [worker])
   (teardown-worker! [worker]))
 
-(defn do-worker!
-  "Runs a worker through setup, running, and teardown. Returns nil on success,
-  or a throwable if any phase threw."
-  [                 abort!
-   ^CountDownLatch  run-latch
-   ^CountDownLatch  teardown-latch
-                    worker]
-  (let [name (worker-name worker)]
-    (with-thread-name (str "jepsen " name)
-      (try (info "Starting" name)
-           (setup-worker! worker)
-           (try (.countDown run-latch)
-                (info "Running" name)
-                (run-worker! worker)
-                ; Normal termination
-                (.countDown teardown-latch)
-                (try (info "Stopping" name)
-                     (teardown-worker! worker)
-                     nil
-                     (catch Throwable t
-                       (warn t "Error tearing down" name)
-                       t))
-
-                (catch Throwable t
-                  ; Failure in running
-                  (warn t "Error running" name)
-                  (abort! worker)
-                  (Thread/interrupted) ; Clear our interrupt state
-                  (.countDown teardown-latch)
-                  (try (info "Stopping" name)
-                       (teardown-worker! worker)
-                       t
-                       (catch Throwable t
-                         (warn t "Error tearing down" name)
-                         t))))
-
-           (catch Throwable t
-             ; Failure in setup process
-             (warn t "Error setting up" name)
-             (abort! worker)
-             (Thread/interrupted) ; Clear our interrupt state
-             (.countDown teardown-latch)
-             (try (info "Stopping" name)
-                  (teardown-worker! worker)
-                  t
-                  (catch Throwable t
-                    (warn t "Error tearing down" name)
-                    t)))))))
-
 (defn run-workers!
-  "Runs a set of workers."
+  "Runs a set of workers through setup, running, and teardown."
   [workers]
-  (let [n (count workers)
-        thread-group    (ThreadGroup. "jepsen workers")
-        aborting-worker (promise)
-        abort!          (fn abort! [w]
-                          (deliver aborting-worker w)
-                          (mapv abort-worker! workers)
-                          (.interrupt thread-group))
-        run-latch       (CountDownLatch. n)
-        teardown-latch  (CountDownLatch. n)
-        results         (take n (repeatedly promise))
-        threads         (mapv (fn [worker result]
-                                (Thread. thread-group
-                                         (bound-fn []
-                                           (deliver result
-                                                    (do-worker! abort!
-                                                                run-latch
-                                                                teardown-latch
-                                                                worker)))))
-                              workers
-                              results)]
+  (try
+    ; Set up
+    (real-pmap (fn setup [w]
+                 (let [name (worker-name w)]
+                   (with-thread-name (str "jepsen " name)
+                     (info "Setting up" name)
+                     (setup-worker! w))))
+               workers)
+    ; Run
+    (real-pmap (fn run [w]
+                 (let [name (worker-name w)]
+                   (with-thread-name (str "jepsen " name)
+                     (info "Running" name)
+                     (run-worker! w))))
+               workers)
 
-    ; Launch threads!
-    (doseq [t threads] (.start t))
-
-    ; Wait for completion
-    (let [results (mapv deref results)]
-      ; If nobody aborted already, we'll fill in a default of nil
-      (deliver aborting-worker nil)
-
-      ; Did any crash?
-      (when-let [aborting-worker @aborting-worker]
-        (->> (map (fn [worker result]
-                    (when (identical? worker aborting-worker)
-                      result))
-                  workers
-                  results)
-             (remove nil?)
-             first
-             throw)))))
-
+    (finally
+      ; Teardown
+      (real-pmap (fn teardown [w]
+                   (let [name (worker-name w)]
+                     (with-thread-name (str "jepsen " name)
+                       (info "Tearing down" name)
+                       (teardown-worker! w))))
+                 workers))))
 
 (defn invoke-op!
   "Applies an operation to a client, catching client exceptions and converting
@@ -364,7 +315,7 @@
               (try
                 ; Open a new client
                 (set! (.client this) (client/open! (:client test) test node))
-                (catch RuntimeException e
+                (catch Exception e
                   (warn e "Error opening client")
                   (let [fail (assoc op
                                     :type  :fail
@@ -450,7 +401,7 @@
   (NemesisWorker. test nil (atom false)))
 
 (defn run-case!
-  "Spawns nemesis and clients, runs a single test case, snarf the logs, and
+  "Spawns nemesis and clients, runs a single test case, and
   returns that case's history."
   [test]
   (let [history (atom [])
@@ -475,13 +426,29 @@
       ; Go!
       (run-workers! (cons nemesis clients)))
 
-    ; Download logs
-    (snarf-logs! test)
-
     ; Unregister our history
     (swap! (:active-histories test) disj history)
 
     @history))
+
+(defn analyze!
+  "After running the test and obtaining a history, we perform some
+  post-processing on the history, run the checker, and write the test to disk
+  again."
+  [test]
+  (info "Analyzing...")
+  (let [; Give each op in the history a monotonically increasing index
+        test (assoc test :history (history/index (:history test)))
+        _ (when (:model test)
+            (warn "DEPRECATED: Checker model is assigned to test, which is no longer supported. If the checker still needs a model, see `jepsen.checker` documentation for details."))
+        ; Run checkers
+        test (assoc test :results (checker/check-safe
+                                   (:checker test)
+                                   test
+                                   (:history test)))]
+    (info "Analysis complete")
+    (when (:name test) (store/save-2! test))
+    test))
 
 (defn log-results
   "Logs info about the results of a test to stdout, and returns test."
@@ -508,12 +475,12 @@
     :port               SSH listening port (22)
     :private-key-path   A path to an SSH identity file (~/.ssh/id_rsa)
     :strict-host-key-checking  Whether or not to verify host keys
+  :logging    Logging options; see jepsen.store/start-logging!
   :os         The operating system; given by the OS protocol
   :db         The database to configure: given by the DB protocol
   :client     A client for the database
   :nemesis    A client for failures
   :generator  A generator of operations to apply to the DB
-  :model      The model used to verify the history is correct
   :checker    Verifies that the history is valid
   :log-files  A list of paths to logfiles/dirs which should be captured at
               the end of the test.
@@ -544,12 +511,11 @@
 
   8. Teardown the operating system
 
-  9. When the generator is finished, invoke the checker with the model and
-     the history
+  9. When the generator is finished, invoke the checker with the history
     - This generates the final report"
   [test]
-  (try
-    (log-results
+  (tt/with-threadpool
+    (try
       (with-thread-name "jepsen test runner"
         (let [test (assoc test
                           ; Initialization time
@@ -586,7 +552,8 @@
                                (cons :nemesis (range (:concurrency test)))
                                (util/with-relative-time
                                  ; Run a single case
-                                 (let [test (assoc test :history (run-case! test))
+                                 (let [test (assoc test :history
+                                                   (run-case! test))
                                        ; Remove state
                                        test (dissoc test
                                                     :barrier
@@ -594,17 +561,10 @@
                                                     :sessions)]
                                    (info "Run complete, writing")
                                    (when (:name test) (store/save-1! test))
-                                   test))))))))
-              _    (info "Analyzing")
-              ; Give each op in the history a monotonically increasing index
-              test (assoc test :history (history/index (:history test)))
-              test (assoc test :results (checker/check-safe
-                                          (:checker test)
-                                          test
-                                          (:model test)
-                                          (:history test)))]
-
-          (info "Analysis complete")
-          (when (:name test) (store/save-2! test)))))
+                                   (analyze! test)))))))))]
+          (log-results test)))
+      (catch Throwable t
+        (warn t "Test crashed!")
+        (throw t))
     (finally
-      (store/stop-logging!))))
+      (store/stop-logging!)))))
