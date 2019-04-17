@@ -149,13 +149,15 @@
                  )))))
 
 (defrecord QueueClient
-  [conn]
+  [conn publish-confirm-timeout]
   client/Client
   (open! [client test node]
     (info "open! called for " node)
     (try
       (assoc client :conn (rmq/connect {:host (name node)
-                                      :automatically-recover false}))
+                                        :automatically-recover false})
+                    :publish-confirm-timeout (test :publish-confirm-timeout)                    
+                    )
     (catch Exception _ client))
     )
   (setup! [client test]
@@ -193,7 +195,7 @@
 
                     ; Block until message acknowledged or crash
                     (try
-                        (if (lco/wait-for-confirms ch 5000)
+                        (if (lco/wait-for-confirms ch publish-confirm-timeout)
                           (assoc op :type :ok)
                           (assoc op :type :fail))
                       (catch java.util.concurrent.TimeoutException _ (assoc op :type :info :error :timeout)))
@@ -211,7 +213,7 @@
           (assoc op :type :info :error :timeout)))   
             ))
 
-(defn queue-client [] (QueueClient. nil))
+(defn queue-client [] (QueueClient. nil nil))
 
 (def network-partition-nemeses
   "A map of network partition nemesis names"
@@ -294,6 +296,10 @@
     :default  "random-partition-halves"
     :missing  (str "--network-partition " (cli/one-of network-partition-nemeses))
     :validate [network-partition-nemeses (cli/one-of network-partition-nemeses)]] 
+   [nil "--publish-confirm-timeout NUM" "Timeout for publish confirms (in milliseconds)"
+    :default  5000
+    :parse-fn parse-long
+    :validate [pos? "Must be a positive integer."]] 
    ])
 
 (defn -main
