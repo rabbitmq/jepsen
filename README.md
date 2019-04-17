@@ -3,7 +3,7 @@
 
 ## How to run
 
-From the root of the directory:
+From the root directory of the project:
 
 ```
 export JEPSEN_ROOT=$(pwd)

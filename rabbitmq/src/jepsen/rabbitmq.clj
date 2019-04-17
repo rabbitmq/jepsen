@@ -40,73 +40,71 @@
             (info "Deleting rabbitmq")
             (c/exec :rm :-rf "/tmp/rabbitmq*")
 
-            (let [uri "https://github.com/rabbitmq/rabbitmq-server/releases/download/v3.8.0-beta.3/rabbitmq-server-generic-unix-3.8.0-beta.3.tar.xz" ]
+            (c/su
+              (c/exec* "killall -q -9 'beam.smp' 'epmd' || true")
+              (try (c/exec* "erl -noshell -eval \"\\$2 /= hd(erlang:system_info(otp_release)) andalso halt(2).\" -run init stop")
+                    (catch Exception e
+                      (info "Erlang not detected, installing it...")
+                      (info "downloading esl dpkg")
+                      (let [deb_file (cu/wget! "https://packages.erlang-solutions.com/erlang-solutions_1.0_all.deb")]
+                        (c/exec :dpkg :-i deb_file))
+                      ; pin Erlang version  
+                      (c/exec :mkdir :-p "/etc/apt/preferences.d/")
+                        (c/exec :echo (-> "rabbitmq/erlang"
+                                      io/resource
+                                      slurp
+                                      (str/replace "$ERLANG_VERSION" erlang-version))
+                            :> "/etc/apt/preferences.d/erlang")  
+                      (info "apt-update")
+                      (debian/update!)
+                      (info "Installing esl-erlang")
+                      (debian/install [:socat :esl-erlang]
+                                      )))
 
-              (c/su
-                (c/exec* "killall -q -9 'beam.smp' 'epmd' || true")
-                (try (c/exec* "erl -noshell -eval \"\\$2 /= hd(erlang:system_info(otp_release)) andalso halt(2).\" -run init stop")
-                     (catch Exception e
-                       (info "Erlang not detected, installing it...")
-                       (info "downloading esl dpkg")
-                       (let [deb_file (cu/wget! "https://packages.erlang-solutions.com/erlang-solutions_1.0_all.deb")]
-                         (c/exec :dpkg :-i deb_file))
-                       ; pin Erlang version  
-                       (c/exec :mkdir :-p "/etc/apt/preferences.d/")
-                          (c/exec :echo (-> "rabbitmq/erlang"
-                                        io/resource
-                                        slurp
-                                        (str/replace "$ERLANG_VERSION" erlang-version))
-                              :> "/etc/apt/preferences.d/erlang")  
-                       (info "apt-update")
-                       (debian/update!)
-                       (info "Installing esl-erlang")
-                       (debian/install [:socat :esl-erlang]
-                                       )))
+              (info "Downloading RabbitMQ " (test :archive-url))
+              (cu/install-archive! (str (test :archive-url)) "/tmp/rabbitmq-server")
 
-                (info "Downloading RabbitMQ " uri)
-                (cu/install-archive! uri "/tmp/rabbitmq-server")
-
-                ; Update config
-                (c/exec :echo (-> "rabbitmq/rabbitmq.conf"
-                                  io/resource
-                                  slurp)
-                        :> "/tmp/rabbitmq-server/etc/rabbitmq/rabbitmq.conf")
-                (info "setting Erlang cookie")
-                (c/exec :echo "jepsen-rabbitmq"
-                        :> "/root/.erlang.cookie")
-                (c/exec :chmod :600 "/root/.erlang.cookie")        
-                
-                ; Start broker on first node
-                (let [p (core/primary test)]
-                  (if (= node p)
-                    (do
-                      (info "Starting RabbitMQ on first node")
-                      (c/exec* "/tmp/rabbitmq-server/sbin/rabbitmq-server -detached")
-                    )
+              ; Update config
+              (c/exec :echo (-> "rabbitmq/rabbitmq.conf"
+                                io/resource
+                                slurp)
+                      :> "/tmp/rabbitmq-server/etc/rabbitmq/rabbitmq.conf")
+              (info "setting Erlang cookie")
+              (c/exec :echo "jepsen-rabbitmq"
+                      :> "/root/.erlang.cookie")
+              (c/exec :chmod :600 "/root/.erlang.cookie")        
+              
+              ; Start broker on first node
+              (let [p (core/primary test)]
+                (if (= node p)
+                  (do
+                    (info "Starting RabbitMQ on first node")
+                    (c/exec* "/tmp/rabbitmq-server/sbin/rabbitmq-server -detached")
                   )
                 )
-                ; wait for the primary to come up
-                (Thread/sleep 5000)
-                (core/synchronize test)
-                ; start the remaining nodes
-                (let [p (core/primary test)]
-                  (if-not (= node p)
-                    (do
-                      (info "Starting RabbitMQ")
-                      (c/exec* "/tmp/rabbitmq-server/sbin/rabbitmq-server -detached")
-                      (info "Waiting for 5 seconds")
-                      (Thread/sleep 5000)
-                      (info "Stopping app")
-                      (c/exec* "/tmp/rabbitmq-server/sbin/rabbitmqctl stop_app")    
-                      (info "Join cluster " (str "rabbit@" p))
-                      (c/exec* "/tmp/rabbitmq-server/sbin/rabbitmqctl" "join_cluster" (str "rabbit@" p))    
-                      (info "Starting app")
-                      (c/exec* "/tmp/rabbitmq-server/sbin/rabbitmqctl start_app")
-                      (info "App started")
-                    )
+              )
+              ; wait for the primary to come up
+              (Thread/sleep 5000)
+              (core/synchronize test)
+              ; start the remaining nodes
+              (let [p (core/primary test)]
+                (if-not (= node p)
+                  (do
+                    (info "Starting RabbitMQ")
+                    (c/exec* "/tmp/rabbitmq-server/sbin/rabbitmq-server -detached")
+                    (info "Waiting for 5 seconds")
+                    (Thread/sleep 5000)
+                    (info "Stopping app")
+                    (c/exec* "/tmp/rabbitmq-server/sbin/rabbitmqctl stop_app")    
+                    (info "Join cluster " (str "rabbit@" p))
+                    (c/exec* "/tmp/rabbitmq-server/sbin/rabbitmqctl" "join_cluster" (str "rabbit@" p))    
+                    (info "Starting app")
+                    (c/exec* "/tmp/rabbitmq-server/sbin/rabbitmqctl start_app")
+                    (info "App started")
                   )
                 )
-                ))))
+              )
+              )))
 
 
 
@@ -268,6 +266,9 @@
     :default  10
     :parse-fn parse-long
     :validate [pos? "Must be a positive integer."]]
+   [nil "--archive-url URL" "URL to retrieve RabbitMQ Generic Unix archive"
+    :default "https://github.com/rabbitmq/rabbitmq-server/releases/download/v3.8.0-beta.3/rabbitmq-server-generic-unix-3.8.0-beta.3.tar.xz"
+    :parse-fn read-string]
    ])
 
 (defn -main

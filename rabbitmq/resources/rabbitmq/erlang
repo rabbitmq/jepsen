@@ -1,0 +1,3 @@
+Package: esl-erlang
+Pin: version $ERLANG_VERSION
+Pin-Priority: 1000
