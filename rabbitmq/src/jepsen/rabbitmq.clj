@@ -30,6 +30,8 @@
   (:import (com.rabbitmq.client AlreadyClosedException
                                 ShutdownSignalException)))
 
+(def erlang-version "1:21.3.5-1")
+
 (defn db
   []
   (reify db/DB
@@ -48,6 +50,13 @@
                        (info "downloading esl dpkg")
                        (let [deb_file (cu/wget! "https://packages.erlang-solutions.com/erlang-solutions_1.0_all.deb")]
                          (c/exec :dpkg :-i deb_file))
+                       ; pin Erlang version  
+                       (c/exec :mkdir :-p "/etc/apt/preferences.d/")
+                          (c/exec :echo (-> "rabbitmq/erlang"
+                                        io/resource
+                                        slurp
+                                        (str/replace "$ERLANG_VERSION" erlang-version))
+                              :> "/etc/apt/preferences.d/erlang")  
                        (info "apt-update")
                        (debian/update!)
                        (info "Installing esl-erlang")
