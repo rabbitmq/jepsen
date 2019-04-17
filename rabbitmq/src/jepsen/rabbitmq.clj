@@ -213,17 +213,37 @@
 
 (defn queue-client [] (QueueClient. nil))
 
+(def network-partition-nemeses
+  "A map of network partition nemesis names"
+  {"random-partition-halves"   ""
+   "partition-halves"          ""
+   "partition-majorities-ring" ""
+   "partition-random-node"     ""
+   })
+
+(defn init-nemesis
+      "Returns appropriate nemesis"
+      [opts]
+      (case (:network-partition opts)
+            "random-partition-halves"   (nemesis/partition-random-halves)
+            "partition-halves"          (nemesis/partition-halves)
+            "partition-majorities-ring" (nemesis/partition-majorities-ring)
+            "partition-random-node"     (nemesis/partition-random-node)
+            )
+      )
+
 (defn rabbit-test
   "Given an options map from the command-line runner (e.g. :nodes, :ssh,
   :concurrency, ...), constructs a test map."
   [opts]
   (info :opts opts)
+  (let [nemesis (init-nemesis opts)]
   (merge tests/noop-test
          {:name       "rabbitmq-simple-partition"
           :os         debian/os
           :db         (db)
           :client     (queue-client)
-          :nemesis    (nemesis/partition-random-halves)
+          :nemesis    nemesis
           :checker    (checker/total-queue)
           :generator  (gen/phases
                         (->> (gen/queue)
@@ -244,7 +264,8 @@
                           (gen/each
                             (gen/once {:type :invoke
                                        :f    :drain}))))}
-         opts))
+         opts)
+         ))
 
 (defn parse-long
       "Parses a string to a Long. Passes through `nil`."
@@ -269,6 +290,10 @@
    [nil "--archive-url URL" "URL to retrieve RabbitMQ Generic Unix archive"
     :default "https://github.com/rabbitmq/rabbitmq-server/releases/download/v3.8.0-beta.3/rabbitmq-server-generic-unix-3.8.0-beta.3.tar.xz"
     :parse-fn read-string]
+   [nil "--network-partition NAME" "Which network partition strategy to use. Default is random-partition-halves"
+    :default  "random-partition-halves"
+    :missing  (str "--network-partition " (cli/one-of network-partition-nemeses))
+    :validate [network-partition-nemeses (cli/one-of network-partition-nemeses)]] 
    ])
 
 (defn -main
