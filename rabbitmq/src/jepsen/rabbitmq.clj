@@ -183,9 +183,12 @@
                                 :persistent    true})
 
                    ; Block until message acknowledged or crash
-                   (if (lco/wait-for-confirms ch 5000)
-                     (assoc op :type :ok)
-                     (assoc op :type :fail)))
+                   (try
+                      (if (lco/wait-for-confirms ch 5000)
+                        (assoc op :type :ok)
+                        (assoc op :type :fail))
+                    (catch java.util.concurrent.TimeoutException _ (assoc op :type :info :error :timeout)))
+                    )
 
         :dequeue (dequeue! ch op)
 
