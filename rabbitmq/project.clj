@@ -7,4 +7,4 @@
   :jvm-opts ["-Dcom.sun.management.jmxremote"]
   :dependencies [[org.clojure/clojure "1.10.0"]
                  [jepsen "0.1.13"]
-                 [com.novemberain/langohr "5.0.0" ]])
+                 [com.novemberain/langohr "5.1.0" ]])
