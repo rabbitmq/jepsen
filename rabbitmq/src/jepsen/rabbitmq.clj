@@ -220,14 +220,15 @@
           :checker    (checker/total-queue)
           :generator  (gen/phases
                         (->> (gen/queue)
-                             (gen/delay 1/10)
+                             ; FIXME could gen/stagger introduce good randomness? 
+                             (gen/delay (/ (:rate opts)))
                              (gen/nemesis
                                (gen/seq
-                                 (cycle [(gen/sleep 10)
+                                 (cycle [(gen/sleep (:time-before-partition opts))
                                          {:type :info :f :start}
-                                         (gen/sleep 10)
+                                         (gen/sleep (:partition-duration opts))
                                          {:type :info :f :stop}])))
-                             (gen/time-limit 30))
+                             (gen/time-limit (:time-limit opts)))
                         (gen/nemesis
                           (gen/once {:type :info, :f :stop}))
                         (gen/log "waiting for recovery")
@@ -238,9 +239,31 @@
                                        :f    :drain}))))}
          opts))
 
+(defn parse-long
+      "Parses a string to a Long. Passes through `nil`."
+      [s]
+      (when s (Long/parseLong s)))
+
+(def cli-opts
+  "Additional command line options."
+  [
+   ["-r" "--rate HZ" "Approximate number of enqueue/dequeue per second, per thread."
+    :default  10
+    :parse-fn read-string
+    :validate [#(and (number? %) (pos? %)) "Must be a positive number"]] 
+   [nil "--partition-duration NUM" "Duration of partition (in seconds)"
+    :default  10
+    :parse-fn parse-long
+    :validate [pos? "Must be a positive integer."]]
+   [nil "--time-before-partition NUM" "Time before the partition starts (in seconds)"
+    :default  10
+    :parse-fn parse-long
+    :validate [pos? "Must be a positive integer."]]
+   ])
+
 (defn -main
   "Handles command line arguments. Can either run a test, or a web server for
   browsing results."
   [& args]
-  (cli/run! (cli/single-test-cmd {:test-fn rabbit-test})
+  (cli/run! (cli/single-test-cmd {:test-fn rabbit-test, :opt-spec cli-opts})
             args))
