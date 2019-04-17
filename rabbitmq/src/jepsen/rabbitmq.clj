@@ -138,7 +138,8 @@
      (try ~@body
           (finally
             (try (rmq/close ~ch)
-                 (catch AlreadyClosedException _#))))))
+                 (catch AlreadyClosedException _# (info "channel was already closed"))
+                 )))))
 
 (defrecord QueueClient
   [conn]
@@ -170,33 +171,38 @@
       (meh (rmq/close conn)))
 
   (invoke! [client test op]
-    (with-ch [ch conn]
-      (case (:f op)
-        :enqueue (do
-                   (lco/select ch) ; Use confirmation tracking
+    (try 
+      (with-ch [ch conn]
+        (case (:f op)
+          :enqueue (do
+                    (lco/select ch) ; Use confirmation tracking
 
-                   ; Empty string is the default exhange
-                   (lb/publish ch "" queue
-                               (codec/encode (:value op))
-                               {:content-type  "application/edn"
-                                :mandatory     true
-                                :persistent    true})
+                    ; Empty string is the default exhange
+                    (lb/publish ch "" queue
+                                (codec/encode (:value op))
+                                {:content-type  "application/edn"
+                                  :mandatory     true
+                                  :persistent    true})
 
-                   ; Block until message acknowledged or crash
-                   (try
-                      (if (lco/wait-for-confirms ch 5000)
-                        (assoc op :type :ok)
-                        (assoc op :type :fail))
-                    (catch java.util.concurrent.TimeoutException _ (assoc op :type :info :error :timeout)))
-                    )
+                    ; Block until message acknowledged or crash
+                    (try
+                        (if (lco/wait-for-confirms ch 5000)
+                          (assoc op :type :ok)
+                          (assoc op :type :fail))
+                      (catch java.util.concurrent.TimeoutException _ (assoc op :type :info :error :timeout)))
+                      )
 
-        :dequeue (dequeue! ch op)
+          :dequeue (dequeue! ch op)
 
-        :drain (loop [values []]
-          (let [v (dequeue! ch op)]
-          (if (= (:type v) :ok)
-            (recur (conj values (:value v)))
-            (assoc op :type :ok, :value values))))))))
+          :drain (loop [values []]
+            (let [v (dequeue! ch op)]
+            (if (= (:type v) :ok)
+              (recur (conj values (:value v)))
+              (assoc op :type :ok, :value values))))))
+         (catch java.util.concurrent.TimeoutException _ 
+          (info "channel operation timed out")
+          (assoc op :type :info :error :timeout)))   
+            ))
 
 (defn queue-client [] (QueueClient. nil))
 
