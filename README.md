@@ -47,3 +47,16 @@ INFO [2019-04-18 07:39:40,503] jepsen test runner - jepsen.core {:ok-count 417,
 
 Everything looks good! ヽ(‘ー`)ノ
 ```
+
+## Running on a locally-built binary
+
+The test runs by default on a RabbitMQ version available on GitHub releases. It is also possible to run the test
+on a RabbitMQ Generic Unix package available on the local filesystem:
+
+ * copy the Generic Unix archive at the root of the project (in the host system, not in the Docker container)
+ * make sure the archive shows up in the controller Docker container: `ls -al /jepsen`
+ * run the test with the `--archive-url` option, e.g.
+
+ ```
+ lein run test --time-limit 30 --archive-url file:///jepsen/rabbitmq-server-generic-unix-3.8.0+beta.3.6.g0a92665.tar.xz
+ ```
