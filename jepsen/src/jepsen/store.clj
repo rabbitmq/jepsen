@@ -2,13 +2,14 @@
   "Persistent storage for test runs and later analysis."
   (:refer-clojure :exclude [load])
   (:require [clojure.data.fressian :as fress]
-            [clojure.pprint :refer [pprint]]
             [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.tools.logging :refer :all]
             [clj-time.core :as time]
             [clj-time.local :as time.local]
             [clj-time.coerce :as time.coerce]
             [clj-time.format :as time.format]
+            [fipp.edn :refer [pprint]]
             [unilog.config :as unilog]
             [multiset.core :as multiset]
             [jepsen.util :as util])
@@ -18,6 +19,7 @@
                           Path)
            (java.nio.file.attribute FileAttribute
                                     PosixFilePermissions)
+           (java.time Instant)
            (org.fressian.handlers WriteHandler ReadHandler)
            (multiset.core MultiSet)))
 
@@ -64,7 +66,13 @@
        {"multiset" (reify WriteHandler
                      (write [_ w set]
                        (.writeTag     w "multiset" 1)
-                       (.writeObject  w (multiset/multiplicities set))))}}
+                       (.writeObject  w (multiset/multiplicities set))))}
+
+      java.time.Instant
+      {"instant" (reify WriteHandler
+                   (write [_ w instant]
+                     (.writeTag w "instant" 1)
+                     (.writeObject w (.toString instant))))}}
 
       (merge fress/clojure-write-handlers)
       fress/associative-lookup
@@ -105,7 +113,11 @@
        "multiset" (reify ReadHandler
                     (read [_ rdr tag component-count]
                       (multiset/multiplicities->multiset
-                        (.readObject rdr))))}
+                        (.readObject rdr))))
+
+       "instant" (reify ReadHandler
+                   (read [_ rdr tag component-count]
+                     (Instant/parse (.readObject rdr))))}
 
       (merge fress/clojure-read-handlers)
       fress/associative-lookup))
@@ -170,6 +182,48 @@
     (let [in (fress/create-reader file :handlers read-handlers)]
       (fress/read-object in))))
 
+(defn class-name->ns-str
+  "Turns a class string into a namespace string (by translating _ to -)"
+  [class-name]
+  (str/replace class-name #"_" "-"))
+
+(defn edn-tag->constructor
+  "Takes an edn tag and returns a constructor fn taking that tag's value and
+  building an object from it."
+  [tag]
+  (let [c (resolve tag)]
+    (when (nil? c)
+      (throw (RuntimeException. (str "EDN tag " (pr-str tag) " isn't resolvable to a class")
+                                (pr-str tag))))
+
+    (when-not ((supers c) clojure.lang.IRecord)
+      (throw (RuntimeException.
+             (str "EDN tag " (pr-str tag)
+                  " looks like a class, but it's not a record,"
+                  " so we don't know how to deserialize it."))))
+
+    (let [; Translate from class name "foo.Bar" to namespaced constructor fn
+          ; "foo/map->Bar"
+          constructor-name (-> (name tag)
+                               class-name->ns-str
+                               (str/replace #"\.([^\.]+$)" "/map->$1"))
+          constructor (resolve (symbol constructor-name))]
+      (when (nil? constructor)
+        (throw (RuntimeException.
+               (str "EDN tag " (pr-str tag) " looks like a record, but we don't"
+                    " have a map constructor " constructor-name " for it"))))
+      constructor)))
+
+(def memoized-edn-tag->constructor (memoize edn-tag->constructor))
+
+(defn default-edn-reader
+  "We use defrecords heavily and it's nice to be able to deserialize them."
+  [tag value]
+  (if-let [c (memoized-edn-tag->constructor tag)]
+    (c value)
+    (throw (RuntimeException.
+             (str "Don't know how to read edn tag " (pr-str tag))))))
+
 (defn load-results
   "Loads only a results.edn by name and time."
   [test-name test-time]
@@ -177,7 +231,7 @@
                      (io/reader (path {:name       test-name
                                        :start-time test-time}
                                       "results.edn")))]
-    (clojure.edn/read file)))
+    (clojure.edn/read {:default default-edn-reader} file)))
 
 (def memoized-load-results (memoize load-results))
 
@@ -234,19 +288,44 @@
         (map (fn [f] [f (delay (load test-name f))]))
         (into {}))))
 
-(defn update-symlinks!
-  "Creates `latest` symlinks to the given test, if a store directory exists."
+(defn latest
+  "Loads the latest test"
+  []
+  (when-let [t (->> (tests)
+                    vals
+                    (apply concat)
+                    sort
+                    util/fast-last
+                    val)]
+    @t))
+
+(defn update-symlink!
+  "Takes a test and a symlink path. Creates a symlink from that path to the
+  test directory, if it exists."
+  [test dest]
+  (when (.exists (path test))
+    (let [src  (.toPath (path test))
+          dest (.. FileSystems
+                   getDefault
+                   (getPath base-dir (into-array dest)))]
+      (Files/deleteIfExists dest)
+      (Files/createSymbolicLink dest (.relativize (.getParent dest) src)
+                                (make-array FileAttribute 0)))))
+
+(defn update-current-symlink!
+  "Creates a `current` symlink to the currently running test, if a store
+  directory exists."
   [test]
-  (doseq [dest [["latest"] [(:name test) "latest"]]]
-    ; did you just tell me to go fuck myself
-    (when (.exists (path test))
-      (let [src  (.toPath (path test))
-            dest (.. FileSystems
-                     getDefault
-                     (getPath base-dir (into-array dest)))]
-        (Files/deleteIfExists dest)
-        (Files/createSymbolicLink dest (.relativize (.getParent dest) src)
-                                  (make-array FileAttribute 0))))))
+  (update-symlink! test ["current"]))
+
+(defn update-symlinks!
+  "Creates `latest` and `current` symlinks to the given test, if a store
+  directory exists."
+  [test]
+  (doseq [dest [["current"]
+                ["latest"]
+                [(:name test) "latest"]]]
+    (update-symlink! test dest)))
 
 (defmacro with-out-file
   "Binds stdout to a file for the duration of body."
@@ -267,8 +346,15 @@
 (defn write-history!
   "Writes out history.txt and history.edn files."
   [test]
-  (util/pwrite-history! (path! test "history.txt") (:history test))
-  (util/pwrite-history! (path! test "history.edn") prn (:history test)))
+  (->> [(future
+          (util/with-thread-name "jepsen history.txt"
+            (util/pwrite-history! (path! test "history.txt") (:history test))))
+        (future
+          (util/with-thread-name "jepsen history.edn"
+            (util/pwrite-history! (path! test "history.edn") prn
+                                  (:history test))))]
+       (map deref)
+       dorun))
 
 (defn write-fressian!
   "Write the entire test as a .fressian file"
@@ -292,10 +378,12 @@
   test)
 
 (defn save-2!
-  "Phase 2: after computing results, we re-write the fressian file and also
-  dump results as edn. Returns test."
+  "Phase 2: after computing results, we re-write the fressian file, histories,
+  and also dump results as edn. Returns test."
   [test]
   (->> [(future (util/with-thread-name "jepsen results" (write-results! test)))
+        (future (util/with-thread-name "jepsen history"
+                  (write-history! test)))
         (future (util/with-thread-name "jepsen fressian"
                   (write-fressian! test)))]
        (map deref)
@@ -308,7 +396,11 @@
    :pattern "%p\t[%t] %c: %m%n"})
 
 (defn start-logging!
-  "Starts logging to a file in the test's directory."
+  "Starts logging to a file in the test's directory. Also updates current
+  symlink. Test may include a :logging key, which should be a map with the
+  following optional options:
+
+      {:overrides   A map of packages to log level keywords}"
   [test]
   (unilog/start-logging!
     {:level   "info"
@@ -317,7 +409,9 @@
                  {:appender :file
                   :encoder :pattern
                   :pattern "%d{ISO8601}{GMT}\t%p\t[%t] %c: %m%n"
-                  :file (.getCanonicalPath (path! test "jepsen.log"))}]}))
+                  :file (.getCanonicalPath (path! test "jepsen.log"))}]
+     :overrides (:overrides (:logging test))})
+  (update-current-symlink! test))
 
 (defn stop-logging!
   "Resets logging to console only."

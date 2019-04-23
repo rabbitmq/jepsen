@@ -7,8 +7,10 @@
             [jepsen.net         :as net]))
 
 (defprotocol Nemesis
-  (setup! [this test] "Set up the nemesis to work with the cluster. Returns the nemesis ready to be invoked")
-  (invoke! [this test op] "Apply an operation to the nemesis, which alters the cluster.")
+  (setup! [this test] "Set up the nemesis to work with the cluster. Returns the
+                      nemesis ready to be invoked")
+  (invoke! [this test op] "Apply an operation to the nemesis, which alters the
+                          cluster.")
   (teardown! [this test] "Tear down the nemesis when work is complete"))
 
 (def noop
@@ -19,8 +21,9 @@
     (teardown! [this test] this)))
 
 (defn setup-compat!
-  "Calls `jepsen.nemesis/setup!`, if possible, falling back to `jepsen.client/setup!`.
-  Warns users that nemeses implementing `jepsen.client` have been deprecated."
+  "Calls `jepsen.nemesis/setup!`, if possible, falling back to
+  `jepsen.client/setup!`. Warns users that nemeses implementing `jepsen.client`
+  have been deprecated."
   [nemesis test node]
   (if (instance? jepsen.nemesis.Nemesis nemesis)
     (try
@@ -39,8 +42,9 @@
     (client/invoke! nemesis test op)))
 
 (defn teardown-compat!
-  "Calls `jepsen.nemesis/teardown!`, if possible, falling back to `jepsen.client/teardown!`.
-  Warns users that nemeses implementing `jepsen.client` have been deprecated."
+  "Calls `jepsen.nemesis/teardown!`, if possible, falling back to
+  `jepsen.client/teardown!`. Warns users that nemeses implementing
+  `jepsen.client` have been deprecated."
   [nemesis test]
   (if (instance? jepsen.nemesis.Nemesis nemesis)
     (try (teardown! nemesis test)
@@ -48,6 +52,22 @@
            nemesis))
     (do (warn "DEPRECATED: Nemesis does not implement protocol `jepsen.nemesis/Nemesis`, falling back to `jepsen.client/teardown!`. You should migrate to `jepsen.nemesis/Nemesis` to avoid compatibility issues. See the jepsen.nemesis documentation for details.")
         (client/teardown! nemesis test))))
+
+(defn timeout
+  "Sometimes nemeses are unreliable. If you wrap them in this nemesis, it'll
+  time out their operations with the given timeout, in milliseconds. Timed out
+  operations have :value :timeout."
+  [timeout-ms nemesis]
+  (reify Nemesis
+    (setup! [this test]
+      (timeout timeout-ms (setup! nemesis test)))
+
+    (invoke! [this test op]
+      (util/timeout timeout-ms (assoc op :value :timeout)
+                    (invoke! nemesis test op)))
+
+    (teardown! [this test]
+      (teardown! nemesis test))))
 
 (defn bisect
   "Given a sequence, cuts it in half; smaller half first."
@@ -90,23 +110,26 @@
 
 (defn partitioner
   "Responds to a :start operation by cutting network links as defined by
-  (grudge nodes), and responds to :stop by healing the network."
-  [grudge]
-  (reify Nemesis
-    (setup! [this test]
-      (net/heal! (:net test) test)
-      this)
+  (grudge nodes), and responds to :stop by healing the network. The grudge to
+  apply is either taken from the :value of a :start op, or if that is nil, by
+  calling (grudge (:nodes test))"
+  ([] (partitioner nil))
+  ([grudge]
+   (reify Nemesis
+     (setup! [this test]
+       (net/heal! (:net test) test)
+       this)
 
-    (invoke! [this test op]
-      (case (:f op)
-        :start (let [grudge (grudge (:nodes test))]
-                 (net/drop-all! test grudge)
-                 (assoc op :value [:isolated grudge]))
-        :stop  (do (net/heal! (:net test) test)
-                   (assoc op :value :network-healed))))
+     (invoke! [this test op]
+       (case (:f op)
+         :start (let [grudge (or (:value op) (grudge (:nodes test)))]
+                  (net/drop-all! test grudge)
+                  (assoc op :value [:isolated grudge]))
+         :stop  (do (net/heal! (:net test) test)
+                    (assoc op :value :network-healed))))
 
-    (teardown! [this test]
-      (net/heal! (:net test) test))))
+     (teardown! [this test]
+       (net/heal! (:net test) test)))))
 
 (defn partition-halves
   "Responds to a :start operation by cutting the network into two halves--first
@@ -196,8 +219,8 @@
 (defn clock-scrambler
   "Randomizes the system clock of all nodes within a dt-second window."
   [dt]
-  (reify client/Client
-    (setup! [this test _]
+  (reify Nemesis
+    (setup! [this test]
       this)
 
     (invoke! [this test op]
@@ -219,6 +242,9 @@
   the `jepsen.control` session to the given node, so you can just call `(c/exec
   ...)`.
 
+  The targeter can take either (targeter test nodes) or, if that fails,
+  (targeter nodes).
+
   Re-selects a fresh node (or nodes) for each start--if targeter returns nil,
   skips the start. The return values from the start and stop fns will become
   the :values of the returned :info operations from the nemesis, e.g.:
@@ -226,19 +252,24 @@
       {:value {:n1 [:killed \"java\"]}}"
   [targeter start! stop!]
   (let [nodes (atom nil)]
-    (reify client/Client
-      (setup! [this test _] this)
+    (reify Nemesis
+      (setup! [this test] this)
 
       (invoke! [this test op]
         (locking nodes
           (assoc op :type :info, :value
                  (case (:f op)
-                   :start (if-let [ns (-> test :nodes targeter util/coll)]
-                            (if (compare-and-set! nodes nil ns)
-                              (c/on-many ns (start! test c/*host*))
-                              (str "nemesis already disrupting "
-                                   (pr-str @nodes)))
-                            :no-target)
+                   :start (let [ns (:nodes test)
+                                ns (try (targeter test ns)
+                                        (catch clojure.lang.ArityException e
+                                          (targeter ns)))
+                                ns (util/coll ns)]
+                            (if ns
+                              (if (compare-and-set! nodes nil ns)
+                                (c/on-many ns (start! test c/*host*))
+                                (str "nemesis already disrupting "
+                                     (pr-str @nodes)))
+                              :no-target))
                    :stop (if-let [ns @nodes]
                            (let [value (c/on-many ns (stop! test c/*host*))]
                              (reset! nodes nil)
@@ -273,8 +304,8 @@
   where the value is a map of nodes to {:file, :drop} maps, on those nodes,
   drops the last :drop bytes from the given file."
   []
-  (reify client/Client
-    (setup! [this test _] this)
+  (reify Nemesis
+    (setup! [this test] this)
 
     (invoke! [this test op]
       (assert (= (:f op) :truncate))

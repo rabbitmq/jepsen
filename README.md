@@ -1,111 +1,62 @@
-# Jepsen
-
-Breaking distributed systems so you don't have to.
-
-Jepsen is a Clojure library. A test is a Clojure program which uses the Jepsen
-library to set up a distributed system, run a bunch of operations against that
-system, and verify that the history of those operations makes sense. Jepsen has
-been used to verify everything from eventually-consistent commutative databases
-to linearizable coordination systems to distributed task schedulers. It can
-also generate graphs of performance and availability, helping you characterize
-how a system responds to different faults. See
-[jepsen.io](https://jepsen.io/analyses) for examples of the sorts of analyses
-you can carry out with Jepsen.
-
-## Documentation
-
-This [tutorial](doc/tutorial/index.md) walks you through writing a Jepsen test
-from scratch.
-
-For reference, see the [API documentation](http://jepsen-io.github.io/jepsen/).
-
-## Design overview
-
-A Jepsen test runs as a Clojure program on a *control node*. That program uses
-SSH to log into a bunch of *db nodes*, where it sets up the distributed system
-you're going to test using the test's pluggable *os* and *db*.
-
-Once the system is running, the control node spins up a set of logically
-single-threaded *processes*, each with its own *client* for the distributed
-system. A *generator* generates new operations for each process to perform.
-Processes then apply those operations to the system using their clients. The
-start and end of each operation is recorded in a *history*. While performing
-operations, a special *nemesis* process introduces faults into the system--also
-scheduled by the generator.
-
-Finally, the DB and OS are torn down. Jepsen uses a *checker* to analyze the
-test's history for correctness, and to generate reports, graphs, etc. The test,
-history, analysis, and any supplementary results are written to the filesystem
-under `store/<test-name>/<date>/` for later review. Symlinks to the latest
-results are maintained at each level for convenience.
+# Jepsen Tests for RabbitMQ
 
 
-## Setting up a Jepsen environment
+## How to run
 
-Your local machine needs a JVM and leiningen 2 installed. Probably want JNA for SSH auth too.
+From the root directory of the project:
 
-```sh
-sudo apt-get install openjdk-8-jre openjdk-8-jre-headless libjna-java
+```
+export JEPSEN_ROOT=$(pwd)
+cd docker
+./up.sh --dev
 ```
 
-For your db nodes, you'll need some (I use five) debian boxes. I run debian
-jessie, but some DBs don't need the latest packages so you might get away with
-an older distribution, or possibly ubuntu. Each one should be accessible from
-the control node via SSH. By default they're named n1, n2, n3, n4, and n5, but
-that (along with SSH username, password, identity files, etc) is all definable
-in your test. The account you use on those boxes needs sudo access to set up
-DBs, control firewalls, etc.
+From another terminal:
 
-Be advised that tests may mess with clocks, add apt repos, run killall -9 on
-processes, and generally break things, so you shouldn't, you know, point jepsen
-at your prod machines unless you like to live dangerously, or you wrote the
-test and know exactly what it's doing.
-
-You can run your DB nodes as separate physical machines, VMs, LXC instances, or
-via Docker.
-
-- You can launch a complete Jepsen cluster from the [AWS
-  Marketplace](https://aws.amazon.com/marketplace/pp/B01LZ7Y7U0?qid=1486758124485&sr=0-1&ref_=srh_res_product_title).
-  Choose "5+1 node cluster" to get an entire cluster as a Cloudformation stack,
-  with SSH keys and firewall rules preconfigured. Choose "Single AMI" if you'd
-  just like a single node.
-
-- See [lxc.md](doc/lxc.md) for some of my notes on setting up LXC instances.
-
-- You can also use [Docker Compose](docker/README.md) for setting up Docker instances.
-
-## Running a test
-
-Once you've got everything set up, you should be able to run `cd aerospike;
-lein test`, and it'll spit out something like
-
-```clj
-INFO  jepsen.core - Analysis invalid! (ﾉಥ益ಥ）ﾉ ┻━┻
-
-{:valid? false,
- :counter
- {:valid? false,
-  :reads
-  [[190 193 194]
-   [199 200 201]
-   [253 255 256]
-   ...}}
+```
+docker exec -it jepsen-control bash
+cd knossos
+lein install
+cd ../rabbitmq
+lein run test --help
 ```
 
-## FAQ
+The last command displays the available options. To run a test for 30 seconds with network partition of 10 seconds:
 
-### JSCH auth errors
-
-You might be hitting a jsch bug which doesn't know how to read hashed
-known_hosts files. Remove all keys for the DB hosts from your `known_hosts`
-file, then:
-
-```sh
-ssh-keyscan -t rsa n1 >> ~/.ssh/known_hosts
-ssh-keyscan -t rsa n2 >> ~/.ssh/known_hosts
-ssh-keyscan -t rsa n3 >> ~/.ssh/known_hosts
-ssh-keyscan -t rsa n4 >> ~/.ssh/known_hosts
-ssh-keyscan -t rsa n5 >> ~/.ssh/known_hosts
+```
+lein run test --time-limit 30
 ```
 
-to add unhashed versions of each node's hostkey to your `~/.ssh/known_hosts`.
+The first run can take a while because of the provisioning of the nodes. The console output is like the following if the
+run is successful:
+
+```
+INFO [2019-04-18 07:39:40,503] jepsen test runner - jepsen.core {:ok-count 417,
+ :duplicated-count 0,
+ :valid? true,
+ :lost-count 0,
+ :lost #{},
+ :acknowledged-count 415,
+ :recovered #{221 167},
+ :attempt-count 417,
+ :unexpected #{},
+ :unexpected-count 0,
+ :recovered-count 2,
+ :duplicated #{}}
+
+
+Everything looks good! ヽ(‘ー`)ノ
+```
+
+## Running on a locally-built binary
+
+The test runs by default on a RabbitMQ version available on GitHub releases. It is also possible to run the test
+on a RabbitMQ Generic Unix package available on the local filesystem:
+
+ * copy the Generic Unix archive at the root of the project (in the host system, not in the Docker container)
+ * make sure the archive shows up in the controller Docker container: `ls -al /jepsen`
+ * run the test with the `--archive-url` option, e.g.
+
+ ```
+ lein run test --time-limit 30 --archive-url file:///jepsen/rabbitmq-server-generic-unix-3.8.0+beta.3.6.g0a92665.tar.xz
+ ```
