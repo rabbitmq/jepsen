@@ -69,6 +69,11 @@
                                 io/resource
                                 slurp)
                       :> "/tmp/rabbitmq-server/etc/rabbitmq/rabbitmq.conf")
+              (c/exec :echo (-> "rabbitmq/advanced.config"
+                                io/resource
+                                slurp
+                                (str/replace "$NET_TICKTIME" (str (test :net-ticktime))))
+                      :> "/tmp/rabbitmq-server/etc/rabbitmq/advanced.config")
               (info "setting Erlang cookie")
               (c/exec :echo "jepsen-rabbitmq"
                       :> "/root/.erlang.cookie")
@@ -96,7 +101,7 @@
                     (Thread/sleep 5000)
                     (info "Stopping app")
                     (c/exec* "/tmp/rabbitmq-server/sbin/rabbitmqctl stop_app")    
-                    (info "Join cluster " (str "rabbit@" p))
+                    (info "Join cluster" (str "rabbit@" p))
                     (c/exec* "/tmp/rabbitmq-server/sbin/rabbitmqctl" "join_cluster" (str "rabbit@" p))    
                     (info "Starting app")
                     (c/exec* "/tmp/rabbitmq-server/sbin/rabbitmqctl start_app")
@@ -299,7 +304,11 @@
    [nil "--publish-confirm-timeout NUM" "Timeout for publish confirms (in milliseconds)"
     :default  5000
     :parse-fn parse-long
-    :validate [pos? "Must be a positive integer."]] 
+    :validate [pos? "Must be a positive integer."]]
+   [nil "--net-ticktime NUM" "Erlang net tick time in seconds (https://www.rabbitmq.com/nettick.html)."
+    :default  15
+    :parse-fn parse-long
+    :validate [pos? "Must be a positive integer."]]  
    ])
 
 (defn -main
