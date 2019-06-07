@@ -30,7 +30,7 @@
   (:import (com.rabbitmq.client AlreadyClosedException
                                 ShutdownSignalException)))
 
-(def erlang-version "1:21.3.8.1-1")
+(def erlang-version "1:22.0.2-1")
 
 (defn db
   []
@@ -45,20 +45,21 @@
               (try (c/exec* "erl -noshell -eval \"\\$2 /= hd(erlang:system_info(otp_release)) andalso halt(2).\" -run init stop")
                     (catch Exception e
                       (info "Erlang not detected, installing it...")
-                      (info "downloading esl dpkg")
-                      (let [deb_file (cu/wget! "https://packages.erlang-solutions.com/erlang-solutions_1.0_all.deb")]
-                        (c/exec :dpkg :-i deb_file))
+                      (c/exec :echo "deb https://dl.bintray.com/rabbitmq-erlang/debian stretch erlang" :> "/etc/apt/sources.list.d/rabbitmq-erlang.list")
+                      (info "downloading RabbitMQ repository signature")
+                      (let [signature_file (cu/wget! "http://www.rabbitmq.com/rabbitmq-release-signing-key.asc")]
+                        (c/exec :apt-key :add signature_file))
                       ; pin Erlang version  
                       (c/exec :mkdir :-p "/etc/apt/preferences.d/")
-                        (c/exec :echo (-> "rabbitmq/erlang"
-                                      io/resource
-                                      slurp
-                                      (str/replace "$ERLANG_VERSION" erlang-version))
-                            :> "/etc/apt/preferences.d/erlang")  
+                      (c/exec :echo (-> "rabbitmq/erlang"
+                                    io/resource
+                                    slurp
+                                    (str/replace "$ERLANG_VERSION" erlang-version))
+                          :> "/etc/apt/preferences.d/erlang")  
                       (info "apt-update")
                       (debian/update!)
-                      (info "Installing esl-erlang")
-                      (debian/install [:socat :esl-erlang]
+                      (info "Installing Erlang")
+                      (debian/install [:socat :erlang-nox]
                                       )))
 
               (info "Downloading RabbitMQ " (test :archive-url))
