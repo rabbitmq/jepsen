@@ -20,13 +20,7 @@
             [jepsen.os.debian :as debian]
             [knossos.model :as model]
             [knossos.core          :as knossos]
-            [knossos.op            :as op]
-            [langohr.core          :as rmq]
-            [langohr.channel       :as lch]
-            [langohr.confirm       :as lco]
-            [langohr.queue         :as lq]
-            [langohr.exchange      :as le]
-            [langohr.basic         :as lb])
+            [knossos.op            :as op])
   (:import (com.rabbitmq.client AlreadyClosedException
                                 ShutdownSignalException)))
 
@@ -129,19 +123,19 @@
 (def queue "jepsen.queue")
 
 (defn dequeue!
-  "Given a channel and an operation, dequeues a value and returns the
+  "Given a client and an operation, dequeues a value and returns the
   corresponding operation."
-  [ch op]
-  ; Rabbit+Langohr's auto-ack dynamics mean that even if we issue a dequeue req
-  ; then crash, the message should be re-delivered and we can count this as a
-  ; failure.
-  (timeout 5000 (assoc op :type :fail :value :timeout)
-           (let [result (lb/get ch queue false)]
-             (if (= nil result)
-               (assoc op :type :fail :value :exhausted)
-               (let [[meta payload] result]
-                 (lb/ack ch (:delivery-tag meta))
-                 (assoc op :type :ok :value (codec/decode payload)))))))
+  [conn op]
+  ; even if we issue a dequeue req then crash, the message should be re-delivered
+  ; and we can count this as a failure.
+    (timeout 5000 (assoc op :type :fail :value :timeout)
+            (let [result (com.rabbitmq.jepsen.Utils/dequeue conn)]
+                  (if (= nil result)
+                    (assoc op :type :fail :value :exhausted)
+                    (assoc op :type :ok :value result))
+            ) 
+    )
+)
 
 (defmacro with-ch
   "Opens a channel on 'conn for body, binds it to the provided symbol 'ch, and
@@ -160,63 +154,45 @@
   (open! [client test node]
     (info "open! called for " node)
     (try
-      (assoc client :conn (rmq/connect {:host (name node)
-                                        :automatically-recover false})
+      (assoc client :conn (com.rabbitmq.jepsen.Utils/createClient test node)
                     :publish-confirm-timeout (test :publish-confirm-timeout)                    
                     )
     (catch Exception _ client))
     )
   (setup! [client test]
-    (with-ch [ch conn]
-      ; Initialize queue
-      (do
-        (lq/declare ch queue
-                    {:durable     true
-                     :arguments   {"x-queue-type" "quorum"}
-                     :auto-delete false
-                     :exclusive   false})
-        ; give it all a little bit of time before issuing the first command
-        (Thread/sleep 1000)
-        (lq/purge ch queue)))
+    (com.rabbitmq.jepsen.Utils/setup conn)
     client)
 
   (teardown! [_ test])
   ; there is nothing to tear down
   (close! [_ test]
-      (meh (rmq/close conn)))
+      (meh (com.rabbitmq.jepsen.Utils/close conn))
+  )
 
   (invoke! [client test op]
+    
     (try 
-      (with-ch [ch conn]
         (case (:f op)
           :enqueue (do
-                    (lco/select ch) ; Use confirmation tracking
-
-                    ; Empty string is the default exhange
-                    (lb/publish ch "" queue
-                                (codec/encode (:value op))
-                                {:content-type  "application/edn"
-                                  :mandatory     true
-                                  :persistent    true})
-
-                    ; Block until message acknowledged or crash
                     (try
-                        (if (lco/wait-for-confirms ch publish-confirm-timeout)
-                          (assoc op :type :ok)
-                          (assoc op :type :fail))
-                      (catch java.util.concurrent.TimeoutException _ (assoc op :type :info :error :timeout)))
-                      )
+                      (if (com.rabbitmq.jepsen.Utils/enqueue conn (:value op) publish-confirm-timeout)
+                        (assoc op :type :ok)
+                        (assoc op :type :fail))
+                    (catch java.util.concurrent.TimeoutException _ (assoc op :type :info :error :timeout)))
+                  )
 
-          :dequeue (dequeue! ch op)
+          :dequeue (dequeue! conn op)
 
-          :drain (loop [values []]
-            (let [v (dequeue! ch op)]
-            (if (= (:type v) :ok)
-              (recur (conj values (:value v)))
-              (assoc op :type :ok, :value values))))))
+          :drain (assoc op :type :ok, :value (com.rabbitmq.jepsen.Utils/drain conn))
+        )
          (catch java.util.concurrent.TimeoutException _ 
           (info "channel operation timed out")
-          (assoc op :type :info :error :timeout)))   
+          (assoc op :type :info :error :timeout))
+         (catch java.lang.Exception ex
+          (info "unexpected client exception" (.getMessage ex) "reconnecting")
+          (com.rabbitmq.jepsen.Utils/reconnect conn)
+          (assoc op :type :fail :error :exception))
+          )   
             ))
 
 (defn queue-client [] (QueueClient. nil nil))
@@ -227,6 +203,13 @@
    "partition-halves"          ""
    "partition-majorities-ring" ""
    "partition-random-node"     ""
+   })
+
+(def consumer-types
+  "A map of consumer types"
+  {"asynchronous"  ""
+   "polling"       ""
+   "mixed"         ""
    })
 
 (defn init-nemesis
@@ -310,6 +293,10 @@
     :default  15
     :parse-fn parse-long
     :validate [pos? "Must be a positive integer."]]  
+   [nil "--consumer-type TYPE" "Type of the consumers to dequeue and drain. Default is asynchronous"
+    :default  "asynchronous"
+    :missing  (str "--consumer-type " (cli/one-of consumer-types))
+    :validate [consumer-types (cli/one-of consumer-types)]]  
    ])
 
 (defn -main
