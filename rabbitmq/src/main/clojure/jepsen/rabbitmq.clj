@@ -235,7 +235,11 @@
           :db         (db)
           :client     (queue-client)
           :nemesis    nemesis
-          :checker    (checker/total-queue)
+          :checker (checker/compose
+                     {:perf   (checker/perf)
+                      :queue (checker/total-queue)
+                      ; :timeline (timeline/html)
+                      })
           :generator  (gen/phases
                         (->> (gen/queue)
                              ; FIXME could gen/stagger introduce good randomness? 
