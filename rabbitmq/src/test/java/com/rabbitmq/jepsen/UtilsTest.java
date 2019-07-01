@@ -20,9 +20,7 @@ import clojure.lang.IPersistentVector;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
+import java.util.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -44,7 +42,8 @@ public class UtilsTest {
         int operationIndex = 0;
         int value = 1;
         List<Integer> publishedValues = new ArrayList<>();
-        List<Integer> consumedValues = new ArrayList<>();
+        // because of reconnection, there can be duplicates
+        Set<Integer> consumedValues = new HashSet<>();
         Random random = new Random();
         while (operationIndex < operationCount) {
             Utils.Client client = clients.get(random.nextInt(clientCount));
@@ -53,8 +52,10 @@ public class UtilsTest {
                 client.reconnect();
             }
             if (random.nextBoolean()) {
-                client.enqueue(value, 5000);
-                publishedValues.add(value);
+                boolean published = client.enqueue(value, 5000);
+                if (published) {
+                    publishedValues.add(value);
+                }
                 value++;
             } else {
                 Integer consumedValue = client.dequeue();

@@ -24,8 +24,8 @@ import java.util.*;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class Utils {
 
@@ -114,17 +114,20 @@ public class Utils {
 
     private static abstract class AbstractClient implements Client {
 
+        static final AtomicInteger IDS = new AtomicInteger(0);
+        protected final Integer id;
         private final String host;
-
         private final AtomicBoolean initialized = new AtomicBoolean(false);
-
         protected volatile Connection connection;
+
+        protected AtomicBoolean closed = new AtomicBoolean(false);
 
         protected volatile Channel publishingChannel, consumingChannel;
 
         protected AbstractClient(String host) throws Exception {
             this.host = host;
             this.connection = createConnection();
+            id = IDS.incrementAndGet();
         }
 
         protected Connection createConnection() throws Exception {
@@ -138,10 +141,6 @@ public class Utils {
             if (initialized.compareAndSet(false, true)) {
                 initialize();
             }
-        }
-
-        protected boolean isInitialized() {
-            return initialized.get();
         }
 
         protected abstract void initialize() throws Exception;
@@ -166,72 +165,79 @@ public class Utils {
         }
 
         public void close() throws Exception {
-            connection.close(5000);
+            if (closed.compareAndSet(false, true)) {
+                connection.close(5000);
+            }
         }
 
     }
 
     static class AsynchronousConsumerClient extends AbstractClient {
 
+        private static final Collection<AsynchronousConsumerClient> CLIENTS = new CopyOnWriteArrayList<>();
+        private static final AtomicBoolean DRAINED = new AtomicBoolean(false);
         private final Queue<Delivery> enqueued = new ConcurrentLinkedDeque<>();
         private final CountDownLatch cancelOkLatch = new CountDownLatch(1);
 
-        private volatile String consumerTag;
 
         public AsynchronousConsumerClient(String host) throws Exception {
             super(host);
+            CLIENTS.add(this);
         }
 
         public Integer dequeue() throws Exception {
             initializeIfNecessary();
+            if (Thread.currentThread().isInterrupted()) {
+                return null;
+            }
             Delivery delivery = enqueued.poll();
             if (delivery == null) {
                 return null;
             } else {
+                Integer value = Integer.valueOf(new String(delivery.getBody()));
+                if (Thread.currentThread().isInterrupted()) {
+                    enqueued.offer(delivery);
+                    return null;
+                }
                 consumingChannel.basicAck(delivery.getEnvelope().getDeliveryTag(), false);
-                return Integer.valueOf(new String(delivery.getBody()));
+                return value;
             }
         }
 
         public IPersistentVector drain() throws Exception {
-            Collection<Integer> values = new CopyOnWriteArrayList<>();
-            if (isInitialized()) {
-                consumingChannel.basicCancel(consumerTag);
-                // doing our best to wait for the long-running consumer to be stopped
-                // to drain the local queue safely
-                cancelOkLatch.await(1, TimeUnit.SECONDS);
-                Integer value = dequeue();
-                while (value != null) {
-                    values.add(value);
-                    value = dequeue();
+            if (DRAINED.compareAndSet(false, true)) {
+                for (AsynchronousConsumerClient client : CLIENTS) {
+                    try {
+                        client.close();
+                    } catch (Exception e) {
+                    }
                 }
-                try {
-                    consumingChannel.close();
-                } catch (Exception e) {
-                    // ignoring, we want to drain
+                Thread.sleep(5000L);
+                Collection<Integer> values = new ArrayList<>();
+                Connection c = createConnection();
+                Channel ch = c.createChannel();
+                GetResponse getResponse;
+                while ((getResponse = ch.basicGet(QUEUE, false)) != null) {
+                    try {
+                        Integer value = Integer.valueOf(new String(getResponse.getBody()));
+                        values.add(value);
+                        ch.basicAck(getResponse.getEnvelope().getDeliveryTag(), false);
+                    } catch (Exception e) {
+                        // ignoring, we want to drain
+                    }
                 }
+                return toClojureVector(values);
+            } else {
+                return toClojureVector(new ArrayList<>());
             }
-
-            Channel ch = connection.createChannel();
-            ch.basicConsume(QUEUE, false, (ctag, delivery) -> {
-                values.add(Integer.valueOf(new String(delivery.getBody())));
-                ch.basicAck(delivery.getEnvelope().getDeliveryTag(), false);
-            }, ctag -> {
-            });
-
-            consumingChannel = connection.createChannel();
-            while (consumingChannel.queueDeclarePassive(QUEUE).getMessageCount() != 0) {
-                Thread.sleep(100);
-            }
-            return toClojureVector(values);
         }
 
         protected void initialize() throws Exception {
             consumingChannel = this.connection.createChannel();
             // TODO make QoS configurable?
             consumingChannel.basicQos(1);
-            consumerTag = consumingChannel.basicConsume(QUEUE, false,
-                    ((consumerTag, message) -> enqueued.offer(message)),
+            consumingChannel.basicConsume(QUEUE, false,
+                    (consumerTag, message) -> enqueued.offer(message),
                     (consumerTag -> cancelOkLatch.countDown()));
 
             publishingChannel = connection.createChannel();
@@ -241,13 +247,17 @@ public class Utils {
         @Override
         public void reconnect() throws Exception {
             try {
-                close();
+                // the client close() is protected to be idempotent, so we don't call it here.
+                // we need the connection to be closed to make sure messages in the in-memory
+                // go back to the broker
+                connection.close(5000);
             } catch (Exception e) {
             }
             enqueued.clear(); // not acked anyway, so go back on the queue when connection is closed
             this.connection = createConnection();
             initialize();
         }
+
     }
 
     static class BasicGetClient extends AbstractClient {
@@ -259,12 +269,19 @@ public class Utils {
         @Override
         public Integer dequeue() throws Exception {
             initializeIfNecessary();
+            if (Thread.currentThread().isInterrupted()) {
+                return null;
+            }
             GetResponse getResponse = consumingChannel.basicGet(QUEUE, false);
             if (getResponse == null) {
                 return null;
             } else {
+                Integer value = Integer.valueOf(new String(getResponse.getBody()));
+                if (Thread.currentThread().isInterrupted()) {
+                    return null;
+                }
                 consumingChannel.basicAck(getResponse.getEnvelope().getDeliveryTag(), false);
-                return Integer.valueOf(new String(getResponse.getBody()));
+                return value;
             }
         }
 
