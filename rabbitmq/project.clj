@@ -8,6 +8,6 @@
   :java-source-paths ["src/main/java"]
   :javac-options     ["-target" "1.8" "-source" "1.8"]
   :jvm-opts ["-Dcom.sun.management.jmxremote"]
-  :dependencies [[org.clojure/clojure "1.10.0"]
+  :dependencies [[org.clojure/clojure "1.10.1"]
                  [jepsen "0.1.14"]
-                 [com.rabbitmq/amqp-client "5.7.1" ]])
+                 [com.rabbitmq/amqp-client "5.7.2" ]])
