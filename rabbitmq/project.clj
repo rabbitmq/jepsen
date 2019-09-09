@@ -9,5 +9,5 @@
   :javac-options     ["-target" "1.8" "-source" "1.8"]
   :jvm-opts ["-Dcom.sun.management.jmxremote"]
   :dependencies [[org.clojure/clojure "1.10.1"]
-                 [jepsen "0.1.14"]
-                 [com.rabbitmq/amqp-client "5.7.2" ]])
+                 [jepsen "0.1.15"]
+                 [com.rabbitmq/amqp-client "5.7.3" ]])
