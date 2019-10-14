@@ -24,7 +24,7 @@
   (:import (com.rabbitmq.client AlreadyClosedException
                                 ShutdownSignalException)))
 
-(def erlang-version "1:22.0.*")
+(def erlang-version "1:22.1.*")
 
 (defn db
   []
@@ -283,7 +283,7 @@
     :parse-fn parse-long
     :validate [pos? "Must be a positive integer."]]
    [nil "--archive-url URL" "URL to retrieve RabbitMQ Generic Unix archive"
-    :default "https://github.com/rabbitmq/rabbitmq-server/releases/download/v3.8.0-rc.1/rabbitmq-server-generic-unix-3.8.0-rc.1.tar.xz"
+    :default "https://github.com/rabbitmq/rabbitmq-server/releases/download/v3.8.0/rabbitmq-server-generic-unix-3.8.0.tar.xz"
     :parse-fn read-string]
    [nil "--network-partition NAME" "Which network partition strategy to use. Default is random-partition-halves"
     :default  "random-partition-halves"
