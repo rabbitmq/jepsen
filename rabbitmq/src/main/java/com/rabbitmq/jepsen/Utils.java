@@ -277,10 +277,12 @@ public class Utils {
                 return null;
             } else {
                 Integer value = Integer.valueOf(new String(getResponse.getBody()));
+                System.out.println("Dequeued " + value);
                 if (Thread.currentThread().isInterrupted()) {
                     return null;
                 }
                 consumingChannel.basicAck(getResponse.getEnvelope().getDeliveryTag(), false);
+                System.out.println("Ack-ed " + value + ", returning it to Jepsen");
                 return value;
             }
         }
