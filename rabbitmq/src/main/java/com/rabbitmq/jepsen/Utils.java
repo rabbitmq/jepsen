@@ -19,6 +19,7 @@ package com.rabbitmq.jepsen;
 import clojure.java.api.Clojure;
 import clojure.lang.IPersistentVector;
 import com.rabbitmq.client.*;
+import org.apache.log4j.Logger;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentLinkedDeque;
@@ -28,6 +29,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class Utils {
+
+    static Logger LOGGER = Logger.getLogger("jepsen.client.utils");
 
     private static final String QUEUE = "jepsen.queue";
 
@@ -277,12 +280,12 @@ public class Utils {
                 return null;
             } else {
                 Integer value = Integer.valueOf(new String(getResponse.getBody()));
-                System.out.println("Dequeued " + value);
+                LOGGER.info("Dequeued " + value);
                 if (Thread.currentThread().isInterrupted()) {
                     return null;
                 }
                 consumingChannel.basicAck(getResponse.getEnvelope().getDeliveryTag(), false);
-                System.out.println("Ack-ed " + value + ", returning it to Jepsen");
+                LOGGER.info("Ack-ed " + value + ", returning it to Jepsen");
                 return value;
             }
         }
