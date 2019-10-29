@@ -198,11 +198,14 @@ public class Utils {
                 return null;
             } else {
                 Integer value = Integer.valueOf(new String(delivery.getBody()));
+                LOGGER.info("Async consumer: dequeued " + value);
                 if (Thread.currentThread().isInterrupted()) {
+                    LOGGER.info("Async consumer: worked thread interrupted, returning " + value + " to in-memory queue");
                     enqueued.offer(delivery);
                     return null;
                 }
                 consumingChannel.basicAck(delivery.getEnvelope().getDeliveryTag(), false);
+                LOGGER.info("Async consumer: ack-ed " + value);
                 return value;
             }
         }
@@ -240,7 +243,12 @@ public class Utils {
             // TODO make QoS configurable?
             consumingChannel.basicQos(1);
             consumingChannel.basicConsume(QUEUE, false,
-                    (consumerTag, message) -> enqueued.offer(message),
+                    (consumerTag, message) -> {
+                        Integer value = Integer.valueOf(new String(message.getBody()));
+                        LOGGER.info("Received " + value + ". Enqueuing it in client in-memory queue.");
+                        enqueued.offer(message);
+                        LOGGER.info("Enqueued: " + value);
+                    },
                     (consumerTag -> cancelOkLatch.countDown()));
 
             publishingChannel = connection.createChannel();
@@ -282,6 +290,7 @@ public class Utils {
                 Integer value = Integer.valueOf(new String(getResponse.getBody()));
                 LOGGER.info("Dequeued " + value);
                 if (Thread.currentThread().isInterrupted()) {
+                    LOGGER.info("Worker thread interrupted, not ack-ing " + value);
                     return null;
                 }
                 consumingChannel.basicAck(getResponse.getEnvelope().getDeliveryTag(), false);
