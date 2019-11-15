@@ -43,20 +43,23 @@ public class Utils {
             consumerType = consumerTypeParameter.toString();
         }
 
+        Client client;
         if ("asynchronous".equals(consumerType)) {
-            return new AsynchronousConsumerClient(node.toString());
+            client = new AsynchronousConsumerClient(node.toString());
         } else if ("polling".equals(consumerType)) {
-            return new BasicGetClient(node.toString());
+            client = new BasicGetClient(node.toString());
         } else if ("mixed".equals(consumerType)) {
             Random random = new Random();
             if (random.nextBoolean()) {
-                return new AsynchronousConsumerClient(node.toString());
+                client = new AsynchronousConsumerClient(node.toString());
             } else {
-                return new BasicGetClient(node.toString());
+                client = new BasicGetClient(node.toString());
             }
         } else {
             throw new IllegalArgumentException("Unknown consumer type: " + consumerType);
         }
+        client = new LoggingClient(client);
+        return client;
     }
 
     static Object get(Map<Object, Object> map, String keyStringValue) {
@@ -115,11 +118,86 @@ public class Utils {
 
     }
 
+    private static class LoggingClient implements Client {
+
+        private final Client delegate;
+
+        private LoggingClient(Client delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public void setup() throws Exception {
+            try {
+                delegate.setup();
+            } catch (Exception e) {
+                log("setup", e);
+                throw e;
+            }
+
+        }
+
+        @Override
+        public boolean enqueue(Object value, Number publishConfirmTimeout) throws Exception {
+            try {
+                return delegate.enqueue(value, publishConfirmTimeout);
+            } catch (Exception e) {
+                log("enqueue", e);
+                throw e;
+            }
+        }
+
+        @Override
+        public Integer dequeue() throws Exception {
+            try {
+                return delegate.dequeue();
+            } catch (Exception e) {
+                log("dequeue", e);
+                throw e;
+            }
+        }
+
+        @Override
+        public IPersistentVector drain() throws Exception {
+            try {
+                return delegate.drain();
+            } catch (Exception e) {
+                log("drain", e);
+                throw e;
+            }
+
+        }
+
+        @Override
+        public void close() throws Exception {
+            try {
+                delegate.close();
+            } catch (Exception e) {
+                log("close", e);
+                throw e;
+            }
+        }
+
+        @Override
+        public void reconnect() throws Exception {
+            try {
+                delegate.reconnect();
+            } catch (Exception e) {
+                log("reconnect", e);
+                throw e;
+            }
+        }
+
+        private void log(String method, Exception exception) {
+            LOGGER.info(delegate + ", method " + method + " has failed: " + exception.getClass().getSimpleName() + " " + exception.getMessage());
+        }
+    }
+
     private static abstract class AbstractClient implements Client {
 
         static final AtomicInteger IDS = new AtomicInteger(0);
         protected final Integer id;
-        private final String host;
+        protected final String host;
         private final AtomicBoolean initialized = new AtomicBoolean(false);
         protected volatile Connection connection;
 
@@ -173,6 +251,11 @@ public class Utils {
             }
         }
 
+        protected void log(String message) {
+            LOGGER.info("Client " + host +": " + message);
+        }
+
+
     }
 
     static class AsynchronousConsumerClient extends AbstractClient {
@@ -181,7 +264,6 @@ public class Utils {
         private static final AtomicBoolean DRAINED = new AtomicBoolean(false);
         private final Queue<Delivery> enqueued = new ConcurrentLinkedDeque<>();
         private final CountDownLatch cancelOkLatch = new CountDownLatch(1);
-
 
         public AsynchronousConsumerClient(String host) throws Exception {
             super(host);
@@ -198,14 +280,14 @@ public class Utils {
                 return null;
             } else {
                 Integer value = Integer.valueOf(new String(delivery.getBody()));
-                LOGGER.info("Async consumer: dequeued " + value);
+                log("Async consumer: dequeued " + value);
                 if (Thread.currentThread().isInterrupted()) {
-                    LOGGER.info("Async consumer: worked thread interrupted, returning " + value + " to in-memory queue");
+                    log("Async consumer: worked thread interrupted, returning " + value + " to in-memory queue");
                     enqueued.offer(delivery);
                     return null;
                 }
                 consumingChannel.basicAck(delivery.getEnvelope().getDeliveryTag(), false);
-                LOGGER.info("Async consumer: ack-ed " + value);
+                log("Async consumer: ack-ed " + value);
                 return value;
             }
         }
@@ -245,9 +327,9 @@ public class Utils {
             consumingChannel.basicConsume(QUEUE, false,
                     (consumerTag, message) -> {
                         Integer value = Integer.valueOf(new String(message.getBody()));
-                        LOGGER.info("Received " + value + ". Enqueuing it in client in-memory queue.");
+                        log("Received " + value + ". Enqueuing it in client in-memory queue.");
                         enqueued.offer(message);
-                        LOGGER.info("Enqueued: " + value);
+                        log("Enqueued: " + value);
                     },
                     (consumerTag -> cancelOkLatch.countDown()));
 
@@ -269,6 +351,10 @@ public class Utils {
             initialize();
         }
 
+        @Override
+        public String toString() {
+            return "Async Client [" + host + "]";
+        }
     }
 
     static class BasicGetClient extends AbstractClient {
@@ -288,13 +374,13 @@ public class Utils {
                 return null;
             } else {
                 Integer value = Integer.valueOf(new String(getResponse.getBody()));
-                LOGGER.info("Dequeued " + value);
+                log("Dequeued " + value);
                 if (Thread.currentThread().isInterrupted()) {
-                    LOGGER.info("Worker thread interrupted, not ack-ing " + value);
+                    log("Worker thread interrupted, not ack-ing " + value);
                     return null;
                 }
                 consumingChannel.basicAck(getResponse.getEnvelope().getDeliveryTag(), false);
-                LOGGER.info("Ack-ed " + value + ", returning it to Jepsen");
+                log("Ack-ed " + value + ", returning it to Jepsen");
                 return value;
             }
         }
@@ -324,6 +410,11 @@ public class Utils {
             }
             this.connection = createConnection();
             initialize();
+        }
+
+        @Override
+        public String toString() {
+            return "BasicGet Client [" + host + "]";
         }
     }
 
