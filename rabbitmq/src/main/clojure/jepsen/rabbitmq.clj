@@ -126,14 +126,15 @@
   "Given a client and an operation, dequeues a value and returns the
   corresponding operation."
   [conn op]
-  ; even if we issue a dequeue req then crash, the message should be re-delivered
-  ; and we can count this as a failure.
-    (timeout 5000 (assoc op :type :fail :value :timeout)
-            (let [result (com.rabbitmq.jepsen.Utils/dequeue conn)]
-                  (if (= nil result)
-                    (assoc op :type :fail :value :exhausted)
-                    (assoc op :type :ok :value result))
-            ) 
+    (try
+      (let [result (com.rabbitmq.jepsen.Utils/dequeue conn)]
+            (if (= nil result)
+              (assoc op :type :fail :value :exhausted)
+              (assoc op :type :ok :value result))
+      )
+      (catch java.util.concurrent.TimeoutException _
+          (info "dequeue timed out")
+          (assoc op :type :fail :value :timeout))
     )
 )
 

@@ -22,9 +22,7 @@ import com.rabbitmq.client.*;
 import org.apache.log4j.Logger;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentLinkedDeque;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -245,6 +243,21 @@ public class Utils {
             return publishingChannel.waitForConfirms(publishConfirmTimeout.intValue());
         }
 
+        protected Integer asyncDequeue(AtomicBoolean timedOut, Callable<Integer> dequeueAction) throws Exception {
+            Future<Integer> task = EXECUTOR_SERVICE.submit(dequeueAction);
+            try {
+                return task.get(5, TimeUnit.SECONDS);
+            } catch (TimeoutException te) {
+                timedOut.set(true);
+                try {
+                    task.cancel(true);
+                } catch (Exception e) {
+                    log("Exception while cancelling task " + e.getMessage());
+                }
+                throw te;
+            }
+        }
+
         public void close() throws Exception {
             if (closed.compareAndSet(false, true)) {
                 connection.close(5000);
@@ -257,6 +270,8 @@ public class Utils {
 
 
     }
+
+    private static final ExecutorService EXECUTOR_SERVICE = Executors.newCachedThreadPool();
 
     static class AsynchronousConsumerClient extends AbstractClient {
 
@@ -271,25 +286,31 @@ public class Utils {
         }
 
         public Integer dequeue() throws Exception {
-            initializeIfNecessary();
-            if (Thread.currentThread().isInterrupted()) {
-                return null;
-            }
-            Delivery delivery = enqueued.poll();
-            if (delivery == null) {
-                return null;
-            } else {
-                Integer value = Integer.valueOf(new String(delivery.getBody()));
-                log("Async consumer: dequeued " + value);
-                if (Thread.currentThread().isInterrupted()) {
-                    log("Async consumer: worked thread interrupted, returning " + value + " to in-memory queue");
-                    enqueued.offer(delivery);
+            AtomicBoolean timedOut = new AtomicBoolean(false);
+            return asyncDequeue(timedOut, () -> {
+                initializeIfNecessary();
+                if (Thread.currentThread().isInterrupted() || timedOut.get()) {
                     return null;
                 }
-                consumingChannel.basicAck(delivery.getEnvelope().getDeliveryTag(), false);
-                log("Async consumer: ack-ed " + value);
-                return value;
-            }
+                Delivery delivery = enqueued.poll();
+                if (delivery == null) {
+                    return null;
+                } else {
+                    Integer value = Integer.valueOf(new String(delivery.getBody()));
+                    log("Async consumer: dequeued " + value);
+                    if (Thread.currentThread().isInterrupted() || timedOut.get()) {
+                        log("Async consumer: worker thread interrupted, returning " + value + " to in-memory queue");
+                        enqueued.offer(delivery);
+                        return null;
+                    }
+                    consumingChannel.basicAck(delivery.getEnvelope().getDeliveryTag(), false);
+                    log("Async consumer: ack-ed " + value);
+                    if (Thread.currentThread().isInterrupted() || timedOut.get()) {
+                        log("dequeue for "  + value + " has timed out while ack-ing, Jepsen can count this as a lost message");
+                    }
+                    return value;
+                }
+            });
         }
 
         public IPersistentVector drain() throws Exception {
@@ -365,24 +386,31 @@ public class Utils {
 
         @Override
         public Integer dequeue() throws Exception {
-            initializeIfNecessary();
-            if (Thread.currentThread().isInterrupted()) {
-                return null;
-            }
-            GetResponse getResponse = consumingChannel.basicGet(QUEUE, false);
-            if (getResponse == null) {
-                return null;
-            } else {
-                Integer value = Integer.valueOf(new String(getResponse.getBody()));
-                log("Dequeued " + value);
-                if (Thread.currentThread().isInterrupted()) {
-                    log("Worker thread interrupted, not ack-ing " + value);
+            AtomicBoolean timedOut = new AtomicBoolean(false);
+            return asyncDequeue(timedOut, () -> {
+                initializeIfNecessary();
+                if (Thread.currentThread().isInterrupted() || timedOut.get()) {
                     return null;
                 }
-                consumingChannel.basicAck(getResponse.getEnvelope().getDeliveryTag(), false);
-                log("Ack-ed " + value + ", returning it to Jepsen");
-                return value;
-            }
+                GetResponse getResponse = consumingChannel.basicGet(QUEUE, false);
+                if (getResponse == null) {
+                    return null;
+                } else {
+                    Integer value = Integer.valueOf(new String(getResponse.getBody()));
+                    log("Dequeued " + value);
+                    if (Thread.currentThread().isInterrupted() || timedOut.get()) {
+                        log("Worker thread interrupted, not ack-ing " + value);
+                        // FIXME the dequeue may have timed out, requeueing could avoid keeping this message?
+                        return null;
+                    }
+                    consumingChannel.basicAck(getResponse.getEnvelope().getDeliveryTag(), false);
+                    log("Ack-ed " + value + ", returning it to Jepsen");
+                    if (Thread.currentThread().isInterrupted() || timedOut.get()) {
+                        log("dequeue for "  + value + " has timed out while ack-ing, Jepsen can count this as a lost message");
+                    }
+                    return value;
+                }
+            });
         }
 
         @Override
