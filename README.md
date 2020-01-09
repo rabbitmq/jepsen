@@ -15,9 +15,7 @@ From another terminal:
 
 ```
 docker exec -it jepsen-control bash
-cd knossos
-lein install
-cd ../rabbitmq
+cd rabbitmq
 lein run test --help
 ```
 
