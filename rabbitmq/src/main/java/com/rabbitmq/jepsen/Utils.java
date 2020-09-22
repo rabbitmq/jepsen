@@ -426,9 +426,9 @@ public class Utils {
               Integer value = Integer.valueOf(new String(getResponse.getBody()));
               log("Dequeued " + value);
               if (Thread.currentThread().isInterrupted() || timedOut.get()) {
-                log("Worker thread interrupted, not ack-ing " + value);
-                // FIXME the dequeue may have timed out, requeueing could avoid keeping this
-                // message?
+                log("Worker thread interrupted, not ack-ing " + value + ", re-queueing it");
+                // the dequeue may have timed out, requeueing could avoid keeping this message
+                consumingChannel.basicReject(getResponse.getEnvelope().getDeliveryTag(), true);
                 return null;
               }
               consumingChannel.basicAck(getResponse.getEnvelope().getDeliveryTag(), false);
