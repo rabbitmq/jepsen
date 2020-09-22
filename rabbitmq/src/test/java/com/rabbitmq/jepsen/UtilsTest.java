@@ -26,57 +26,56 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 public class UtilsTest {
 
-    @ParameterizedTest
-    @ValueSource(classes = {Utils.AsynchronousConsumerClient.class, Utils.BasicGetClient.class})
-    public void allMessagesPublishedAreConsumed(Class<Utils.Client> clientClass) throws Exception {
-        int clientCount = 5;
+  @ParameterizedTest
+  @ValueSource(classes = {Utils.AsynchronousConsumerClient.class, Utils.BasicGetClient.class})
+  public void allMessagesPublishedAreConsumed(Class<Utils.Client> clientClass) throws Exception {
+    int clientCount = 5;
 
-        List<Utils.Client> clients = new ArrayList<>(clientCount);
-        for (int i = 0; i < clientCount; i++) {
-            Utils.Client client = clientClass.getConstructor(String.class).newInstance("localhost");
-            clients.add(client);
-            client.setup();
-        }
-
-        int operationCount = 50;
-        int operationIndex = 0;
-        int value = 1;
-        List<Integer> publishedValues = new ArrayList<>();
-        // because of reconnection, there can be duplicates
-        Set<Integer> consumedValues = new HashSet<>();
-        Random random = new Random();
-        while (operationIndex < operationCount) {
-            Utils.Client client = clients.get(random.nextInt(clientCount));
-            // try to reconnect randomly
-            if (random.nextInt(10) > 7) {
-                client.reconnect();
-            }
-            if (random.nextBoolean()) {
-                boolean published = client.enqueue(value, 5000);
-                if (published) {
-                    publishedValues.add(value);
-                }
-                value++;
-            } else {
-                Integer consumedValue = client.dequeue();
-                if (consumedValue != null) {
-                    consumedValues.add(consumedValue);
-                }
-            }
-            operationIndex++;
-        }
-
-        for (Utils.Client client : clients) {
-            IPersistentVector drained = client.drain();
-            for (int i = 0; i < drained.length(); i++) {
-                consumedValues.add(((Number) drained.nth(i)).intValue());
-            }
-            client.close();
-        }
-
-        assertThat(consumedValues)
-                .hasSameSizeAs(publishedValues)
-                .containsExactlyInAnyOrderElementsOf(publishedValues);
+    List<Utils.Client> clients = new ArrayList<>(clientCount);
+    for (int i = 0; i < clientCount; i++) {
+      Utils.Client client = clientClass.getConstructor(String.class).newInstance("localhost");
+      clients.add(client);
+      client.setup();
     }
 
+    int operationCount = 50;
+    int operationIndex = 0;
+    int value = 1;
+    List<Integer> publishedValues = new ArrayList<>();
+    // because of reconnection, there can be duplicates
+    Set<Integer> consumedValues = new HashSet<>();
+    Random random = new Random();
+    while (operationIndex < operationCount) {
+      Utils.Client client = clients.get(random.nextInt(clientCount));
+      // try to reconnect randomly
+      if (random.nextInt(10) > 7) {
+        client.reconnect();
+      }
+      if (random.nextBoolean()) {
+        boolean published = client.enqueue(value, 5000);
+        if (published) {
+          publishedValues.add(value);
+        }
+        value++;
+      } else {
+        Integer consumedValue = client.dequeue();
+        if (consumedValue != null) {
+          consumedValues.add(consumedValue);
+        }
+      }
+      operationIndex++;
+    }
+
+    for (Utils.Client client : clients) {
+      IPersistentVector drained = client.drain();
+      for (int i = 0; i < drained.length(); i++) {
+        consumedValues.add(((Number) drained.nth(i)).intValue());
+      }
+      client.close();
+    }
+
+    assertThat(consumedValues)
+        .hasSameSizeAs(publishedValues)
+        .containsExactlyInAnyOrderElementsOf(publishedValues);
+  }
 }
