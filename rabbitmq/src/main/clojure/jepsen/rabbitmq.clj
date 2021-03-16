@@ -24,7 +24,7 @@
   (:import (com.rabbitmq.client AlreadyClosedException
                                 ShutdownSignalException)))
 
-(def erlang-version "1:22.3.*")
+(def erlang-version "1:23*")
 
 (defn db
   []
@@ -39,21 +39,20 @@
               (try (c/exec* "erl -noshell -eval \"\\$2 /= hd(erlang:system_info(otp_release)) andalso halt(2).\" -run init stop")
                     (catch Exception e
                       (info "Erlang not detected, installing it...")
-                      (c/exec :echo "deb https://dl.bintray.com/rabbitmq-erlang/debian stretch erlang" :> "/etc/apt/sources.list.d/rabbitmq-erlang.list")
-                      (info "downloading RabbitMQ repository signature")
-                      (let [signature_file (cu/wget! "http://www.rabbitmq.com/rabbitmq-release-signing-key.asc")]
-                        (c/exec :apt-key :add signature_file))
+                      (info "downloading esl dpkg")
+                       (let [deb_file (cu/wget! "https://packages.erlang-solutions.com/erlang-solutions_1.0_all.deb")]
+                         (c/exec :dpkg :-i deb_file))
                       ; pin Erlang version  
                       (c/exec :mkdir :-p "/etc/apt/preferences.d/")
                       (c/exec :echo (-> "rabbitmq/erlang"
                                     io/resource
                                     slurp
                                     (str/replace "$ERLANG_VERSION" erlang-version))
-                          :> "/etc/apt/preferences.d/erlang")  
+                          :> "/etc/apt/preferences.d/erlang")
                       (info "apt-update")
                       (debian/update!)
                       (info "Installing Erlang")
-                      (debian/install [:socat :erlang-nox]
+                      (debian/install [:socat :esl-erlang]
                                       )))
 
               (info "Downloading RabbitMQ " (test :archive-url))
@@ -284,7 +283,7 @@
     :parse-fn parse-long
     :validate [pos? "Must be a positive integer."]]
    [nil "--archive-url URL" "URL to retrieve RabbitMQ Generic Unix archive"
-    :default "https://github.com/rabbitmq/rabbitmq-server/releases/download/v3.8.7/rabbitmq-server-generic-unix-3.8.7.tar.xz"
+    :default "https://github.com/rabbitmq/rabbitmq-server/releases/download/v3.8.14/rabbitmq-server-generic-unix-3.8.14.tar.xz"
     :parse-fn read-string]
    [nil "--network-partition NAME" "Which network partition strategy to use. Default is random-partition-halves"
     :default  "random-partition-halves"
