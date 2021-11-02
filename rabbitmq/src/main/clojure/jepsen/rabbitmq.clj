@@ -283,7 +283,7 @@
     :parse-fn parse-long
     :validate [pos? "Must be a positive integer."]]
    [nil "--archive-url URL" "URL to retrieve RabbitMQ Generic Unix archive"
-    :default "https://github.com/rabbitmq/rabbitmq-server/releases/download/v3.8.14/rabbitmq-server-generic-unix-3.8.14.tar.xz"
+    :default "https://github.com/rabbitmq/rabbitmq-server/releases/download/v3.9.8/rabbitmq-server-generic-unix-3.9.8.tar.xz"
     :parse-fn read-string]
    [nil "--network-partition NAME" "Which network partition strategy to use. Default is random-partition-halves"
     :default  "random-partition-halves"
