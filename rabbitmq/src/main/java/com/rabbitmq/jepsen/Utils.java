@@ -284,6 +284,7 @@ public class Utils {
           try (Channel ch = connection.createChannel()) {
             Map<String, Object> queueArguments = new HashMap<>();
             queueArguments.put("x-queue-type", "quorum");
+            queueArguments.put("x-quorum-initial-group-size", 5);
             if (this.deadLetterMode) {
               queueArguments.put("x-dead-letter-exchange", "");
               queueArguments.put("x-dead-letter-routing-key", this.outboundQueue);
@@ -299,6 +300,7 @@ public class Utils {
               log("Declaring " + outboundQueue);
               queueArguments = new HashMap<>();
               queueArguments.put("x-queue-type", "quorum");
+              queueArguments.put("x-quorum-initial-group-size", 5);
               ch.queueDeclare(
                   outboundQueue, true, false, false, queueArguments);
               Thread.sleep(1000);
