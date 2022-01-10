@@ -14,6 +14,9 @@
     <amqp-client.version>5.14.0</amqp-client.version>
     <clojure.version>1.10.0</clojure.version>
     <log4j.version>1.2.17</log4j.version>
+    <logback.version>1.2.10</logback.version>
+    <junit.version>5.8.2</junit.version>
+    <assertj.version>3.22.0</assertj.version>
   </properties>
 
   <dependencies>
@@ -36,19 +39,49 @@
       <version>${log4j.version}</version>
     </dependency>
 
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>${junit.version}</version>
+      <scope>test</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
+      <version>${assertj.version}</version>
+      <scope>test</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>ch.qos.logback</groupId>
+      <artifactId>logback-classic</artifactId>
+      <version>${logback.version}</version>
+      <scope>test</scope>
+    </dependency>
 
 
   </dependencies>
 
   <build>
 
-
     <resources>
       <resource>
         <directory>src/main/resources</directory>
       </resource>
     </resources>
-    
+
+    <plugins>
+      <plugin>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>2.22.2</version>
+      </plugin>
+      <plugin>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <version>2.22.2</version>
+      </plugin>
+    </plugins>
+
   </build>
 
 

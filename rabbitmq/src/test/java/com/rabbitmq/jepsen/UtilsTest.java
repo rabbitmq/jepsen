@@ -17,8 +17,11 @@
 package com.rabbitmq.jepsen;
 
 import clojure.lang.IPersistentVector;
+import com.rabbitmq.jepsen.Utils.AsynchronousConsumerClient;
+import com.rabbitmq.jepsen.Utils.BasicGetClient;
+import com.rabbitmq.jepsen.Utils.LoggingClient;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.*;
 
@@ -26,15 +29,26 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 public class UtilsTest {
 
+  static Object[][] allMessagesPublishedAreConsumed() {
+    return new Object[][] {
+        {AsynchronousConsumerClient.class, false},
+        {AsynchronousConsumerClient.class, true},
+        {BasicGetClient.class, false},
+        {BasicGetClient.class, true},
+    };
+  }
+
   @ParameterizedTest
-  @ValueSource(classes = {Utils.AsynchronousConsumerClient.class, Utils.BasicGetClient.class})
-  public void allMessagesPublishedAreConsumed(Class<Utils.Client> clientClass) throws Exception {
+  @MethodSource
+  public void allMessagesPublishedAreConsumed(Class<Utils.Client> clientClass, boolean deadLetterMode) throws Exception {
+    Utils.reset();
     int clientCount = 5;
 
     List<Utils.Client> clients = new ArrayList<>(clientCount);
     for (int i = 0; i < clientCount; i++) {
-      Utils.Client client = clientClass.getConstructor(String.class).newInstance("localhost");
-      clients.add(client);
+      Utils.Client client = clientClass.getConstructor(String.class, boolean.class)
+          .newInstance("localhost", deadLetterMode);
+      clients.add(new LoggingClient(client));
       client.setup();
     }
 
@@ -66,6 +80,10 @@ public class UtilsTest {
       operationIndex++;
     }
 
+    if (deadLetterMode) {
+      Thread.sleep(Utils.MESSAGE_TTL.toMillis() * 2);
+    }
+
     for (Utils.Client client : clients) {
       IPersistentVector drained = client.drain();
       for (int i = 0; i < drained.length(); i++) {
@@ -77,5 +95,6 @@ public class UtilsTest {
     assertThat(consumedValues)
         .hasSameSizeAs(publishedValues)
         .containsExactlyInAnyOrderElementsOf(publishedValues);
+
   }
 }

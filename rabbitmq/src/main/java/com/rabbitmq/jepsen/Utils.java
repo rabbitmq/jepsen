@@ -19,6 +19,9 @@ package com.rabbitmq.jepsen;
 import clojure.java.api.Clojure;
 import clojure.lang.IPersistentVector;
 import com.rabbitmq.client.*;
+import java.time.Duration;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import org.apache.log4j.Logger;
 
 import java.util.*;
@@ -29,7 +32,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class Utils {
 
   private static final String QUEUE = "jepsen.queue";
+  private static final String DEAD_LETTER_QUEUE = "jepsen.queue.dead.letter";
   private static final ExecutorService EXECUTOR_SERVICE = Executors.newCachedThreadPool();
+  static final Duration MESSAGE_TTL = Duration.ofSeconds(1);
   static Logger LOGGER = Logger.getLogger("jepsen.client.utils");
 
   public static Client createClient(Map<Object, Object> test, Object node) throws Exception {
@@ -41,17 +46,25 @@ public class Utils {
       consumerType = consumerTypeParameter.toString();
     }
 
+    Object deadLetterParameter = get(test, ":dead-letter");
+    boolean deadLetter;
+    if (deadLetterParameter == null) {
+      deadLetter = false;
+    } else {
+      deadLetter = Boolean.valueOf(deadLetterParameter.toString());
+    }
+
     Client client;
     if ("asynchronous".equals(consumerType)) {
-      client = new AsynchronousConsumerClient(node.toString());
+      client = new AsynchronousConsumerClient(node.toString(), deadLetter);
     } else if ("polling".equals(consumerType)) {
-      client = new BasicGetClient(node.toString());
+      client = new BasicGetClient(node.toString(), deadLetter);
     } else if ("mixed".equals(consumerType)) {
       Random random = new Random();
       if (random.nextBoolean()) {
-        client = new AsynchronousConsumerClient(node.toString());
+        client = new AsynchronousConsumerClient(node.toString(), deadLetter);
       } else {
-        client = new BasicGetClient(node.toString());
+        client = new BasicGetClient(node.toString(), deadLetter);
       }
     } else {
       throw new IllegalArgumentException("Unknown consumer type: " + consumerType);
@@ -116,11 +129,11 @@ public class Utils {
     void reconnect() throws Exception;
   }
 
-  private static class LoggingClient implements Client {
+  static class LoggingClient implements Client {
 
     private final Client delegate;
 
-    private LoggingClient(Client delegate) {
+    LoggingClient(Client delegate) {
       this.delegate = delegate;
     }
 
@@ -196,21 +209,42 @@ public class Utils {
     }
   }
 
+  static void reset() {
+    AbstractClient.IDS.set(0);
+    AbstractClient.QUEUES_DECLARED.set(false);
+    AsynchronousConsumerClient.CLIENTS.clear();
+    AsynchronousConsumerClient.DRAINED.set(false);
+    BasicGetClient.CLIENTS.clear();
+    BasicGetClient.DRAINED.set(false);
+  }
+
   private abstract static class AbstractClient implements Client {
 
     static final AtomicInteger IDS = new AtomicInteger(0);
+    static final AtomicBoolean QUEUES_DECLARED = new AtomicBoolean(false);
+    static final Lock QUEUE_DECLARATION_LOCK = new ReentrantLock();
     protected final Integer id;
     protected final String host;
     private final AtomicBoolean initialized = new AtomicBoolean(false);
     protected volatile Connection connection;
+    final boolean deadLetterMode;
+    final String inboundQueue, outboundQueue;
 
     protected AtomicBoolean closed = new AtomicBoolean(false);
 
     protected volatile Channel publishingChannel, consumingChannel;
 
-    protected AbstractClient(String host) throws Exception {
+    protected AbstractClient(String host, boolean deadLetterMode) throws Exception {
       this.host = host;
       this.connection = createConnection();
+      this.deadLetterMode = deadLetterMode;
+      if (this.deadLetterMode) {
+        this.inboundQueue = QUEUE;
+        this.outboundQueue = DEAD_LETTER_QUEUE;
+      } else {
+        this.inboundQueue = QUEUE;
+        this.outboundQueue = QUEUE;
+      }
       id = IDS.incrementAndGet();
     }
 
@@ -231,19 +265,59 @@ public class Utils {
 
     @Override
     public void setup() throws Exception {
-      try (Channel ch = connection.createChannel()) {
-        ch.queueDeclare(
-            QUEUE, true, false, false, Collections.singletonMap("x-queue-type", "quorum"));
-        Thread.sleep(1000);
-        ch.queuePurge(QUEUE);
+      try {
+        QUEUE_DECLARATION_LOCK.lock();
+        if (QUEUES_DECLARED.compareAndSet(false, true)) {
+          try (Channel ch = connection.createChannel()) {
+            ch.queueDelete(inboundQueue);
+          } catch (Exception e) {
+            // OK
+          }
+          if (this.deadLetterMode) {
+            try (Channel ch = connection.createChannel()) {
+              ch.queueDelete(outboundQueue);
+            } catch (Exception e) {
+              // OK
+            }
+          }
+          log("Declaring " + inboundQueue);
+          try (Channel ch = connection.createChannel()) {
+            Map<String, Object> queueArguments = new HashMap<>();
+            queueArguments.put("x-queue-type", "quorum");
+            if (this.deadLetterMode) {
+              queueArguments.put("x-dead-letter-exchange", "");
+              queueArguments.put("x-dead-letter-routing-key", this.outboundQueue);
+              queueArguments.put("x-dead-letter-strategy", "at-least-once");
+              queueArguments.put("x-message-ttl", MESSAGE_TTL.toMillis());
+            }
+            ch.queueDeclare(
+                inboundQueue, true, false, false, queueArguments);
+            Thread.sleep(1000);
+            ch.queuePurge(inboundQueue);
+
+            if (this.deadLetterMode) {
+              log("Declaring " + outboundQueue);
+              queueArguments = new HashMap<>();
+              queueArguments.put("x-queue-type", "quorum");
+              ch.queueDeclare(
+                  outboundQueue, true, false, false, queueArguments);
+              Thread.sleep(1000);
+              ch.queuePurge(outboundQueue);
+            }
+          }
+
+        }
+      } finally {
+        QUEUE_DECLARATION_LOCK.unlock();
       }
+
     }
 
     public boolean enqueue(Object value, Number publishConfirmTimeout) throws Exception {
       initializeIfNecessary();
       publishingChannel.basicPublish(
           "",
-          QUEUE,
+          inboundQueue,
           true,
           new AMQP.BasicProperties.Builder().deliveryMode(2).build(),
           value.toString().getBytes());
@@ -290,15 +364,25 @@ public class Utils {
         Collection<Integer> values = new ArrayList<>();
         Connection c = createConnection();
         Channel ch = c.createChannel();
-        GetResponse getResponse;
-        while ((getResponse = ch.basicGet(QUEUE, false)) != null) {
-          try {
-            Integer value = Integer.valueOf(new String(getResponse.getBody()));
-            values.add(value);
-            ch.basicAck(getResponse.getEnvelope().getDeliveryTag(), false);
-          } catch (Exception e) {
-            // ignoring, we want to drain
-          }
+
+        CallableConsumer<String> drainAction =
+            queue -> {
+              log("Draining from " + queue);
+              GetResponse getResponse;
+              while ((getResponse = ch.basicGet(queue, false)) != null) {
+                try {
+                  Integer value = Integer.valueOf(new String(getResponse.getBody()));
+                  values.add(value);
+                  log("Drained " + value);
+                  ch.basicAck(getResponse.getEnvelope().getDeliveryTag(), false);
+                } catch (Exception e) {
+                  // ignoring, we want to drain
+                }
+              }
+            };
+        drainAction.accept(outboundQueue);
+        if (this.deadLetterMode) {
+          drainAction.accept(inboundQueue);
         }
         return toClojureVector(values);
       } else {
@@ -315,8 +399,8 @@ public class Utils {
     private final Queue<Delivery> enqueued = new ConcurrentLinkedDeque<>();
     private final CountDownLatch cancelOkLatch = new CountDownLatch(1);
 
-    public AsynchronousConsumerClient(String host) throws Exception {
-      super(host);
+    public AsynchronousConsumerClient(String host, boolean deadLetterMode) throws Exception {
+      super(host, deadLetterMode);
       CLIENTS.add(this);
     }
 
@@ -364,8 +448,9 @@ public class Utils {
       consumingChannel = this.connection.createChannel();
       // TODO make QoS configurable?
       consumingChannel.basicQos(1);
+      log("basic.consume from " + this.outboundQueue);
       consumingChannel.basicConsume(
-          QUEUE,
+          this.outboundQueue,
           false,
           (consumerTag, message) -> {
             Integer value = Integer.valueOf(new String(message.getBody()));
@@ -404,8 +489,8 @@ public class Utils {
     private static final Collection<BasicGetClient> CLIENTS = new CopyOnWriteArrayList<>();
     private static final AtomicBoolean DRAINED = new AtomicBoolean(false);
 
-    public BasicGetClient(String host) throws Exception {
-      super(host);
+    public BasicGetClient(String host, boolean deadLetterMode) throws Exception {
+      super(host, deadLetterMode);
       CLIENTS.add(this);
     }
 
@@ -419,7 +504,7 @@ public class Utils {
             if (Thread.currentThread().isInterrupted() || timedOut.get()) {
               return null;
             }
-            GetResponse getResponse = consumingChannel.basicGet(QUEUE, false);
+            GetResponse getResponse = consumingChannel.basicGet(outboundQueue, false);
             if (getResponse == null) {
               return null;
             } else {
@@ -469,5 +554,11 @@ public class Utils {
     public String toString() {
       return "BasicGet Client [" + host + "]";
     }
+  }
+
+  private interface CallableConsumer <T> {
+
+    void accept(T t) throws Exception;
+
   }
 }

@@ -300,7 +300,9 @@
    [nil "--consumer-type TYPE" "Type of the consumers to dequeue and drain. Default is asynchronous"
     :default  "asynchronous"
     :missing  (str "--consumer-type " (cli/one-of consumer-types))
-    :validate [consumer-types (cli/one-of consumer-types)]]  
+    :validate [consumer-types (cli/one-of consumer-types)]]
+   [nil "--dead-letter FLAG" "Use dead letter queue and TTL on messages"
+    :default false]
    ])
 
 (defn -main
