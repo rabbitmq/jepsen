@@ -380,10 +380,10 @@ public class Utils {
                 }
               }
             };
-        drainAction.accept(outboundQueue);
         if (this.deadLetterMode) {
           drainAction.accept(inboundQueue);
         }
+        drainAction.accept(outboundQueue);
         return toClojureVector(values);
       } else {
         return toClojureVector(new ArrayList<>());
