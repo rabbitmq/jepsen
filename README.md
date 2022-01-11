@@ -8,13 +8,13 @@ From the root directory of the project:
 ```
 export JEPSEN_ROOT=$(pwd)
 cd docker
-./up.sh --dev
+bin/up --dev
 ```
 
 From another terminal:
 
 ```
-docker exec -it jepsen-control bash
+bin/console
 cd rabbitmq
 lein run test --help
 ```
