@@ -108,11 +108,12 @@
 
 
   (teardown! [_ test node]
-             (c/su
+            (if (cu/exists? "/tmp/rabbitmq-server/sbin/rabbitmqctl")
+             (do (c/su
                (let [ status (c/exec* "/tmp/rabbitmq-server/sbin/rabbitmqctl eval \"case whereis('%2F_jepsen.queue') of undefined -> no_local_member; _ -> sys:get_status(whereis('%2F_jepsen.queue')) end.\"")]
                                       (info "Quorum Member Status for 'jepsen.queue': " status))
                (let [ status (c/exec* "/tmp/rabbitmq-server/sbin/rabbitmqctl eval \"case whereis('%2F_jepsen.queue.dead.letter') of undefined -> no_local_member; _ -> sys:get_status(whereis('%2F_jepsen.queue.dead.letter')) end.\"")]
-                                      (info "Quorum Member Status for 'jepsen.queue.dead.letter': " status))
+                                      (info "Quorum Member Status for 'jepsen.queue.dead.letter': " status))))
                ; there is no real need to clear anything down here as we
                ; reset everything before each run
                (info node "Teardown complete")))
