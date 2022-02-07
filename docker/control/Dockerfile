@@ -1,4 +1,4 @@
-FROM debian:buster
+FROM ubuntu:16.04
 MAINTAINER jake@apache.org
 
 ENV LEIN_ROOT true
@@ -7,19 +7,17 @@ ENV LEIN_ROOT true
 # Jepsen dependencies
 #
 RUN apt-get -y -q update && \
-    apt-get install -qy openjdk-11-jdk-headless \
-    libjna-java \
-    vim \
-    emacs \
-    git \
-    htop \
-    screen \
-    pssh \
-    curl \
-    wget \
-    gnuplot \
-    graphviz \
-    dos2unix
+    apt-get -y -q install software-properties-common && \
+    add-apt-repository ppa:openjdk-r/ppa && \
+    apt-get -y -q update && \
+    apt-get install -qqy \
+        dos2unix \
+        openjdk-8-jdk \
+        libjna-java \
+        git \
+        gnuplot \
+        wget \
+	vim # not required by jepsen itself, just for ease of use
 
 RUN wget https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/lein && \
     mv lein /usr/bin && \
