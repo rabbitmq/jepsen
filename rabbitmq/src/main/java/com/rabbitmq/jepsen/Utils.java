@@ -18,16 +18,34 @@ package com.rabbitmq.jepsen;
 
 import clojure.java.api.Clojure;
 import clojure.lang.IPersistentVector;
-import com.rabbitmq.client.*;
+import com.rabbitmq.client.AMQP;
+import com.rabbitmq.client.Channel;
+import com.rabbitmq.client.Connection;
+import com.rabbitmq.client.ConnectionFactory;
+import com.rabbitmq.client.Delivery;
+import com.rabbitmq.client.GetResponse;
+import java.net.SocketException;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Queue;
+import java.util.Random;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import org.apache.log4j.Logger;
-
-import java.util.*;
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class Utils {
 
@@ -252,7 +270,26 @@ public class Utils {
       ConnectionFactory cf = new ConnectionFactory();
       cf.setAutomaticRecoveryEnabled(false);
       cf.setHost(this.host);
+
+      long elapsed = 0;
+      long timeout = Duration.ofSeconds(30).toMillis();
+      while (elapsed < timeout) {
+        try {
+          return cf.newConnection();
+        } catch (SocketException e) {
+          waitMs(1000);
+          elapsed += 1000;
+        }
+      }
       return cf.newConnection();
+    }
+
+    private static void waitMs(long ms) {
+      try {
+        Thread.sleep(ms);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+      }
     }
 
     public void initializeIfNecessary() throws Exception {
@@ -289,6 +326,7 @@ public class Utils {
               queueArguments.put("x-dead-letter-exchange", "");
               queueArguments.put("x-dead-letter-routing-key", this.outboundQueue);
               queueArguments.put("x-dead-letter-strategy", "at-least-once");
+              queueArguments.put("x-overflow", "reject-publish");
               queueArguments.put("x-message-ttl", MESSAGE_TTL.toMillis());
             }
             ch.queueDeclare(
@@ -375,7 +413,7 @@ public class Utils {
                 try {
                   Integer value = Integer.valueOf(new String(getResponse.getBody()));
                   values.add(value);
-                  log("Drained " + value);
+                  log("Drained from " + queue + ": " + value);
                   ch.basicAck(getResponse.getEnvelope().getDeliveryTag(), false);
                 } catch (Exception e) {
                   // ignoring, we want to drain

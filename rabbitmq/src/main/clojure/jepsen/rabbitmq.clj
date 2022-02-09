@@ -158,11 +158,9 @@
   client/Client
   (open! [client test node]
     (info "open! called for " node)
-    (try
       (assoc client :conn (com.rabbitmq.jepsen.Utils/createClient test node)
                     :publish-confirm-timeout (test :publish-confirm-timeout)                    
                     )
-    (catch Exception _ client))
     )
   (setup! [client test]
     (com.rabbitmq.jepsen.Utils/setup conn)
