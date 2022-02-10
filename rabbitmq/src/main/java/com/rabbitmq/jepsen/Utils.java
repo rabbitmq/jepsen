@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 Pivotal Software Inc, All Rights Reserved.
+ * Copyright (c) 2019-2022 Pivotal Software Inc, All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -230,14 +230,15 @@ public class Utils {
   static void reset() {
     AbstractClient.IDS.set(0);
     AbstractClient.QUEUES_DECLARED.set(false);
-    AsynchronousConsumerClient.CLIENTS.clear();
-    AsynchronousConsumerClient.DRAINED.set(false);
-    BasicGetClient.CLIENTS.clear();
-    BasicGetClient.DRAINED.set(false);
+    AbstractClient.CLIENTS.clear();
+    AbstractClient.DRAINED.set(false);
   }
 
   private abstract static class AbstractClient implements Client {
 
+    protected static final Collection<Client> CLIENTS =
+        new CopyOnWriteArrayList<>();
+    protected static final AtomicBoolean DRAINED = new AtomicBoolean(false);
     static final AtomicInteger IDS = new AtomicInteger(0);
     static final AtomicBoolean QUEUES_DECLARED = new AtomicBoolean(false);
     static final Lock QUEUE_DECLARATION_LOCK = new ReentrantLock();
@@ -391,10 +392,10 @@ public class Utils {
     }
 
     public IPersistentVector drain(
-        AtomicBoolean drainedAlready, Collection<? extends AbstractClient> clients)
+        AtomicBoolean drainedAlready, Collection<? extends Client> clients)
         throws Exception {
       if (drainedAlready.compareAndSet(false, true)) {
-        for (AbstractClient client : clients) {
+        for (Client client : clients) {
           try {
             client.close();
           } catch (Exception e) {
@@ -409,16 +410,19 @@ public class Utils {
             queue -> {
               log("Draining from " + queue);
               GetResponse getResponse;
+              int count = 0;
               while ((getResponse = ch.basicGet(queue, false)) != null) {
                 try {
                   Integer value = Integer.valueOf(new String(getResponse.getBody()));
                   values.add(value);
                   log("Drained from " + queue + ": " + value);
                   ch.basicAck(getResponse.getEnvelope().getDeliveryTag(), false);
+                  count++;
                 } catch (Exception e) {
                   // ignoring, we want to drain
                 }
               }
+              log("Drained " + count + " message(s) from " + queue);
             };
         if (this.deadLetterMode) {
           drainAction.accept(inboundQueue);
@@ -433,9 +437,6 @@ public class Utils {
 
   static class AsynchronousConsumerClient extends AbstractClient {
 
-    private static final Collection<AsynchronousConsumerClient> CLIENTS =
-        new CopyOnWriteArrayList<>();
-    private static final AtomicBoolean DRAINED = new AtomicBoolean(false);
     private final Queue<Delivery> enqueued = new ConcurrentLinkedDeque<>();
     private final CountDownLatch cancelOkLatch = new CountDownLatch(1);
 
@@ -525,9 +526,6 @@ public class Utils {
   }
 
   static class BasicGetClient extends AbstractClient {
-
-    private static final Collection<BasicGetClient> CLIENTS = new CopyOnWriteArrayList<>();
-    private static final AtomicBoolean DRAINED = new AtomicBoolean(false);
 
     public BasicGetClient(String host, boolean deadLetterMode) throws Exception {
       super(host, deadLetterMode);
