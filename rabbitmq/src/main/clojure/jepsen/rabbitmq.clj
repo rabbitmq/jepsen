@@ -257,7 +257,7 @@
                         (gen/nemesis
                           (gen/once {:type :info, :f :stop}))
                         (gen/log "waiting for recovery")
-                        (gen/sleep 10)
+                        (gen/sleep 20)
                         (gen/clients
                           (gen/each
                             (gen/once {:type :invoke
