@@ -32,7 +32,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
@@ -238,6 +240,7 @@ public class Utils {
 
     protected static final Collection<Client> CLIENTS =
         new CopyOnWriteArrayList<>();
+    protected static final Set<String> HOSTS = ConcurrentHashMap.newKeySet();
     protected static final AtomicBoolean DRAINED = new AtomicBoolean(false);
     static final AtomicInteger IDS = new AtomicInteger(0);
     static final AtomicBoolean QUEUES_DECLARED = new AtomicBoolean(false);
@@ -255,6 +258,7 @@ public class Utils {
 
     protected AbstractClient(String host, boolean deadLetterMode) throws Exception {
       this.host = host;
+      HOSTS.add(host);
       this.connection = createConnection();
       this.deadLetterMode = deadLetterMode;
       if (this.deadLetterMode) {
@@ -267,14 +271,14 @@ public class Utils {
       id = IDS.incrementAndGet();
     }
 
-    protected Connection createConnection() throws Exception {
+    private static Connection createConnection(String host, Duration timeout) throws Exception {
       ConnectionFactory cf = new ConnectionFactory();
       cf.setAutomaticRecoveryEnabled(false);
-      cf.setHost(this.host);
+      cf.setHost(host);
 
       long elapsed = 0;
-      long timeout = Duration.ofSeconds(30).toMillis();
-      while (elapsed < timeout) {
+      long timeoutMs = timeout.toMillis();
+      while (elapsed < timeoutMs) {
         try {
           return cf.newConnection();
         } catch (SocketException e) {
@@ -283,6 +287,10 @@ public class Utils {
         }
       }
       return cf.newConnection();
+    }
+
+    protected Connection createConnection() throws Exception {
+      return createConnection(this.host, Duration.ofSeconds(30));
     }
 
     private static void waitMs(long ms) {
@@ -392,9 +400,10 @@ public class Utils {
     }
 
     public IPersistentVector drain(
-        AtomicBoolean drainedAlready, Collection<? extends Client> clients)
+        AtomicBoolean drainedAlready, Collection<? extends Client> clients, Set<String> hosts)
         throws Exception {
       if (drainedAlready.compareAndSet(false, true)) {
+        log("Draining with a client connected to " + this.host);
         for (Client client : clients) {
           try {
             client.close();
@@ -403,7 +412,23 @@ public class Utils {
         }
         Thread.sleep(5000L);
         Collection<Integer> values = new ArrayList<>();
-        Connection c = createConnection();
+
+        Connection c = null;
+        for (String h : hosts) {
+          log("Trying to connect to node " + h + " to drain.");
+          try {
+            c = createConnection(h, Duration.ofSeconds(10));
+            log("Connected to " + h + " to drain.");
+            break;
+          } catch (Exception e) {
+            log("Error while trying to connect to " + h + ": " + e.getMessage() + ".");
+          }
+        }
+
+        if (c == null) {
+          throw new IllegalStateException("Could not connect to a node to drain");
+        }
+
         Channel ch = c.createChannel();
 
         CallableConsumer<String> drainAction =
@@ -428,6 +453,7 @@ public class Utils {
           drainAction.accept(inboundQueue);
         }
         drainAction.accept(outboundQueue);
+        c.close();
         return toClojureVector(values);
       } else {
         return toClojureVector(new ArrayList<>());
@@ -482,7 +508,7 @@ public class Utils {
     }
 
     public IPersistentVector drain() throws Exception {
-      return drain(DRAINED, CLIENTS);
+      return drain(DRAINED, CLIENTS, HOSTS);
     }
 
     protected void initialize() throws Exception {
@@ -569,7 +595,7 @@ public class Utils {
 
     @Override
     public IPersistentVector drain() throws Exception {
-      return drain(DRAINED, CLIENTS);
+      return drain(DRAINED, CLIENTS, HOSTS);
     }
 
     protected void initialize() throws Exception {
