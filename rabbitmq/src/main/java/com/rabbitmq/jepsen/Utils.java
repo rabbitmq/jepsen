@@ -51,10 +51,10 @@ import org.apache.log4j.Logger;
 
 public class Utils {
 
+  static final Duration MESSAGE_TTL = Duration.ofSeconds(1);
   private static final String QUEUE = "jepsen.queue";
   private static final String DEAD_LETTER_QUEUE = "jepsen.queue.dead.letter";
   private static final ExecutorService EXECUTOR_SERVICE = Executors.newCachedThreadPool();
-  static final Duration MESSAGE_TTL = Duration.ofSeconds(1);
   static Logger LOGGER = Logger.getLogger("jepsen.client.utils");
 
   public static Client createClient(Map<Object, Object> test, Object node) throws Exception {
@@ -134,6 +134,13 @@ public class Utils {
     return (IPersistentVector) Clojure.read(builder.toString());
   }
 
+  static void reset() {
+    AbstractClient.IDS.set(0);
+    AbstractClient.QUEUES_DECLARED.set(false);
+    AbstractClient.CLIENTS.clear();
+    AbstractClient.DRAINED.set(false);
+  }
+
   public interface Client {
 
     void setup() throws Exception;
@@ -147,6 +154,11 @@ public class Utils {
     void close() throws Exception;
 
     void reconnect() throws Exception;
+  }
+
+  private interface CallableConsumer<T> {
+
+    void accept(T t) throws Exception;
   }
 
   static class LoggingClient implements Client {
@@ -229,17 +241,9 @@ public class Utils {
     }
   }
 
-  static void reset() {
-    AbstractClient.IDS.set(0);
-    AbstractClient.QUEUES_DECLARED.set(false);
-    AbstractClient.CLIENTS.clear();
-    AbstractClient.DRAINED.set(false);
-  }
-
   private abstract static class AbstractClient implements Client {
 
-    protected static final Collection<Client> CLIENTS =
-        new CopyOnWriteArrayList<>();
+    protected static final Collection<Client> CLIENTS = new CopyOnWriteArrayList<>();
     protected static final Set<String> HOSTS = ConcurrentHashMap.newKeySet();
     protected static final AtomicBoolean DRAINED = new AtomicBoolean(false);
     static final AtomicInteger IDS = new AtomicInteger(0);
@@ -247,11 +251,10 @@ public class Utils {
     static final Lock QUEUE_DECLARATION_LOCK = new ReentrantLock();
     protected final Integer id;
     protected final String host;
-    private final AtomicBoolean initialized = new AtomicBoolean(false);
-    protected volatile Connection connection;
     final boolean deadLetterMode;
     final String inboundQueue, outboundQueue;
-
+    private final AtomicBoolean initialized = new AtomicBoolean(false);
+    protected volatile Connection connection;
     protected AtomicBoolean closed = new AtomicBoolean(false);
 
     protected volatile Channel publishingChannel, consumingChannel;
@@ -289,16 +292,16 @@ public class Utils {
       return cf.newConnection();
     }
 
-    protected Connection createConnection() throws Exception {
-      return createConnection(this.host, Duration.ofSeconds(30));
-    }
-
     private static void waitMs(long ms) {
       try {
         Thread.sleep(ms);
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
       }
+    }
+
+    protected Connection createConnection() throws Exception {
+      return createConnection(this.host, Duration.ofSeconds(30));
     }
 
     public void initializeIfNecessary() throws Exception {
@@ -338,8 +341,7 @@ public class Utils {
               queueArguments.put("x-overflow", "reject-publish");
               queueArguments.put("x-message-ttl", MESSAGE_TTL.toMillis());
             }
-            ch.queueDeclare(
-                inboundQueue, true, false, false, queueArguments);
+            ch.queueDeclare(inboundQueue, true, false, false, queueArguments);
             Thread.sleep(1000);
             ch.queuePurge(inboundQueue);
 
@@ -348,18 +350,15 @@ public class Utils {
               queueArguments = new HashMap<>();
               queueArguments.put("x-queue-type", "quorum");
               queueArguments.put("x-quorum-initial-group-size", 5);
-              ch.queueDeclare(
-                  outboundQueue, true, false, false, queueArguments);
+              ch.queueDeclare(outboundQueue, true, false, false, queueArguments);
               Thread.sleep(1000);
               ch.queuePurge(outboundQueue);
             }
           }
-
         }
       } finally {
         QUEUE_DECLARATION_LOCK.unlock();
       }
-
     }
 
     public boolean enqueue(Object value, Number publishConfirmTimeout) throws Exception {
@@ -419,41 +418,39 @@ public class Utils {
           try {
             c = createConnection(h, Duration.ofSeconds(10));
             log("Connected to " + h + " to drain.");
+            Channel ch = c.createChannel();
+
+            CallableConsumer<String> drainAction =
+                queue -> {
+                  log("Draining from " + queue);
+                  GetResponse getResponse;
+                  int count = 0;
+                  while ((getResponse = ch.basicGet(queue, false)) != null) {
+                    try {
+                      Integer value = Integer.valueOf(new String(getResponse.getBody()));
+                      values.add(value);
+                      log("Drained from " + queue + ": " + value);
+                      ch.basicAck(getResponse.getEnvelope().getDeliveryTag(), false);
+                      count++;
+                    } catch (Exception e) {
+                      // ignoring, we want to drain
+                    }
+                  }
+                  log("Drained " + count + " message(s) from " + queue);
+                };
+            if (this.deadLetterMode) {
+              drainAction.accept(inboundQueue);
+            }
+            drainAction.accept(outboundQueue);
+            c.close();
             break;
           } catch (Exception e) {
             log("Error while trying to connect to " + h + ": " + e.getMessage() + ".");
           }
         }
 
-        if (c == null) {
-          throw new IllegalStateException("Could not connect to a node to drain");
-        }
+        log("Drained " + values.size() + " message(s) overall");
 
-        Channel ch = c.createChannel();
-
-        CallableConsumer<String> drainAction =
-            queue -> {
-              log("Draining from " + queue);
-              GetResponse getResponse;
-              int count = 0;
-              while ((getResponse = ch.basicGet(queue, false)) != null) {
-                try {
-                  Integer value = Integer.valueOf(new String(getResponse.getBody()));
-                  values.add(value);
-                  log("Drained from " + queue + ": " + value);
-                  ch.basicAck(getResponse.getEnvelope().getDeliveryTag(), false);
-                  count++;
-                } catch (Exception e) {
-                  // ignoring, we want to drain
-                }
-              }
-              log("Drained " + count + " message(s) from " + queue);
-            };
-        if (this.deadLetterMode) {
-          drainAction.accept(inboundQueue);
-        }
-        drainAction.accept(outboundQueue);
-        c.close();
         return toClojureVector(values);
       } else {
         return toClojureVector(new ArrayList<>());
@@ -618,11 +615,5 @@ public class Utils {
     public String toString() {
       return "BasicGet Client [" + host + "]";
     }
-  }
-
-  private interface CallableConsumer <T> {
-
-    void accept(T t) throws Exception;
-
   }
 }
