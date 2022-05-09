@@ -402,7 +402,8 @@ public class Utils {
         AtomicBoolean drainedAlready, Collection<? extends Client> clients, Set<String> hosts)
         throws Exception {
       if (drainedAlready.compareAndSet(false, true)) {
-        log("Draining with a client connected to " + this.host);
+        log("Draining sequence...");
+        log("Closing existing client connections...");
         for (Client client : clients) {
           try {
             client.close();
@@ -443,7 +444,6 @@ public class Utils {
             }
             drainAction.accept(outboundQueue);
             c.close();
-            break;
           } catch (Exception e) {
             log("Error while trying to connect to " + h + ": " + e.getMessage() + ".");
           }
