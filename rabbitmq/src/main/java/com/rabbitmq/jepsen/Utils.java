@@ -47,7 +47,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-import org.apache.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class Utils {
 
@@ -55,7 +56,7 @@ public class Utils {
   private static final String QUEUE = "jepsen.queue";
   private static final String DEAD_LETTER_QUEUE = "jepsen.queue.dead.letter";
   private static final ExecutorService EXECUTOR_SERVICE = Executors.newCachedThreadPool();
-  static Logger LOGGER = Logger.getLogger("jepsen.client.utils");
+  static Logger LOGGER = LoggerFactory.getLogger("jepsen.client.utils");
 
   public static Client createClient(Map<Object, Object> test, Object node) throws Exception {
     Object consumerTypeParameter = get(test, ":consumer-type");
