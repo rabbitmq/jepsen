@@ -91,8 +91,8 @@
                   (do
                     (info "Starting RabbitMQ")
                     (c/exec* "/tmp/rabbitmq-server/sbin/rabbitmq-server -detached")
-                    (info "Waiting for 5 seconds")
-                    (Thread/sleep 5000)
+                    (info "Waiting for 10 seconds")
+                    (Thread/sleep 10000)
                     (info "Stopping app")
                     (c/exec* "/tmp/rabbitmq-server/sbin/rabbitmqctl stop_app")    
                     (info "Join cluster" (str "rabbit@" p))
