@@ -1,5 +1,4 @@
-FROM ubuntu:16.04
-MAINTAINER jake@apache.org
+FROM ubuntu:22.04
 
 ENV LEIN_ROOT true
 
