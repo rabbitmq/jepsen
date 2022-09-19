@@ -116,7 +116,7 @@
                                       (info "Quorum Member Status for 'jepsen.queue': " status))
                (let [ status (c/exec* "/tmp/rabbitmq-server/sbin/rabbitmqctl eval \"case whereis('%2F_jepsen.queue.dead.letter') of undefined -> no_local_member; _ -> sys:get_status(whereis('%2F_jepsen.queue.dead.letter')) end.\"")]
                                       (info "Quorum Member Status for 'jepsen.queue.dead.letter': " status))
-               (let [ status (c/exec* "/tmp/rabbitmq-server/sbin/rabbitmqctl eval \"case supervisor:which_children(rabbit_fifo_dlx_sup) of [] -> no_local_dlx_worker; [{undefined, Pid, worker, _}] -> sys:get_status(Pid) end.\"")]
+               (let [ status (c/exec* "/tmp/rabbitmq-server/sbin/rabbitmqctl eval \"try supervisor:which_children(rabbit_fifo_dlx_sup) of [] -> no_local_dlx_worker; [{undefined, Pid, worker, _}] -> sys:get_status(Pid) catch exit:{noproc, _} -> no_dlx_sup end.\"")]
                                       (info "Status for rabbit_fifo_dlx_worker: " status))))
                ; there is no real need to clear anything down here as we
                ; reset everything before each run
