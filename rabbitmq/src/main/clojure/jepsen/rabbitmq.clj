@@ -24,7 +24,7 @@
   (:import (com.rabbitmq.client AlreadyClosedException
                                 ShutdownSignalException)))
 
-(def erlang-version "1:25.0.4-1")
+(def erlang-version "1:25*")
 
 (defn db
   []
