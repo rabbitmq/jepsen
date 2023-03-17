@@ -83,7 +83,7 @@
                 )
               )
               ; wait for the primary to come up
-              (Thread/sleep 5000)
+              (Thread/sleep 15000)
               (core/synchronize test)
               ; start the remaining nodes
               (let [p (core/primary test)]
@@ -91,8 +91,8 @@
                   (do
                     (info "Starting RabbitMQ")
                     (c/exec* "/tmp/rabbitmq-server/sbin/rabbitmq-server -detached")
-                    (info "Waiting for 15 seconds")
-                    (Thread/sleep 15000)
+                    (info "Waiting for 20 seconds")
+                    (Thread/sleep 20000)
                     (info "Stopping app")
                     (c/exec* "/tmp/rabbitmq-server/sbin/rabbitmqctl stop_app")    
                     (info "Stopped app")
