@@ -116,18 +116,26 @@ if [ "$INIT_ONLY" ]; then
     exit 0
 fi
 
+COMPOSE_CMD="docker-compose"
 exists docker || { ERROR "Please install docker (https://docs.docker.com/engine/installation/)"; exit 1; }
-exists docker-compose || { ERROR "Please install docker-compose (https://docs.docker.com/compose/install/)"; exit 1; }
+exists $COMPOSE_CMD || {
+    docker compose --help > /dev/null 2>&1 || {
+        ERROR "Please install docker-compose (https://docs.docker.com/compose/install/)";
+        exit 1;
+    }
+    COMPOSE_CMD="docker compose"
+}
+
 
 INFO "Running \`docker-compose build\`"
-docker-compose -f docker-compose.yml $COMPOSE $UBUNTU $DEV build
+$COMPOSE_CMD -f docker-compose.yml $COMPOSE $UBUNTU $DEV build
 
 INFO "Running \`docker-compose up\`"
 if [ "$RUN_AS_DAEMON" ]; then
-    docker-compose -f docker-compose.yml $COMPOSE $UBUNTU $DEV up -d
+    $COMPOSE_CMD -f docker-compose.yml $COMPOSE $UBUNTU $DEV up -d
     INFO "All containers started, run \`docker ps\` to view"
     exit 0
 else
     INFO "Please run \`docker exec -it jepsen-control bash\` in another terminal to proceed"
-    docker-compose -f docker-compose.yml $COMPOSE $UBUNTU $DEV up
+    $COMPOSE_CMD -f docker-compose.yml $COMPOSE $UBUNTU $DEV up
 fi
