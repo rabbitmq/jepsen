@@ -446,7 +446,7 @@ public class Utils {
             drainAction.accept(outboundQueue);
             c.close();
           } catch (Exception e) {
-            log("Error while trying to connect to " + h + ": " + e.getMessage() + ".");
+            log("Error while trying to drain from node " + h + ": " + e.getMessage() + ".");
           }
         }
 
