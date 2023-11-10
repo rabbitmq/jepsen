@@ -22,7 +22,6 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
-          file: docker/Dockerfile-website
           platforms: linux/amd64
           push: true
           tags: pivotalrabbitmq/jepsen:latest
