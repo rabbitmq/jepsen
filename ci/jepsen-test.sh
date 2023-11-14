@@ -38,6 +38,7 @@ terraform init
 # spin up the VMs
 terraform apply -auto-approve -var="rabbitmq_branch=$RABBITMQ_BRANCH"
 
+mkdir terraform-state
 # save Terraform state and configuration to clean up even if the task fails
 # this ensures the VMs will be destroyed whatever the outcomes of the job
 cp jepsen-bot.json terraform-state
