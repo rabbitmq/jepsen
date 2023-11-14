@@ -1,5 +1,5 @@
 provider "google" {
-  credentials = file("jepson-bot.json")
+  credentials = file("jepsen-bot.json")
   project     = "cf-rabbitmq-core"
   region      = "europe-west4"
   # if changing the zone, make sure to change it as well in the setup script
