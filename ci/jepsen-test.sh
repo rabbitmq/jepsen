@@ -30,7 +30,7 @@ done
 set -e
 
 # copy Terraform configuration file in current directory
-cp ./ci/qq-jepsen.tf .
+cp ./ci/rabbitmq-jepsen.tf .
 
 # initialize Terraform (get plugins and so)
 terraform init
@@ -45,7 +45,7 @@ cp jepsen-bot terraform-state
 cp jepsen-bot.pub terraform-state
 cp -r .terraform terraform-state
 cp terraform.tfstate terraform-state
-cp qq-jepsen.tf terraform-state
+cp rabbitmq-jepsen.tf terraform-state
 
 # get the Jepsen controller IP
 CONTROLLER_IP=$(terraform output -raw controller_ip)

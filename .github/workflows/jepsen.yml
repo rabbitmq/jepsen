@@ -15,7 +15,7 @@ concurrency:
 
 env:
   RABBITMQ_BRANCH: "312"
-  RABBITMQ_VERSION: ${{ inputs.rabbitmq_version != '' && inputs.rabbitm_version || github.event.client_payload.version}}
+  RABBITMQ_VERSION: ${{ inputs.rabbitmq_version != '' && inputs.rabbitmq_version || github.event.client_payload.version}}
 
 jobs:
   test:
