@@ -97,17 +97,17 @@ ARCHIVE_OPTION="--archive-url file:///tmp/${ARCHIVE}"
 
 JEPSEN_TESTS_PARAMETERS=(
 	"--time-limit 180 --time-before-partition 20 --partition-duration 30 --network-partition random-partition-halves --net-ticktime 15 --consumer-type mixed"
-	# "--time-limit 180 --time-before-partition 20 --partition-duration 30 --network-partition partition-halves --net-ticktime 15 --consumer-type mixed"
-	# "--time-limit 180 --time-before-partition 20 --partition-duration 30 --network-partition partition-majorities-ring --net-ticktime 15 --consumer-type mixed"
-	# "--time-limit 180 --time-before-partition 20 --partition-duration 30 --network-partition partition-random-node --net-ticktime 15 --consumer-type mixed"
-	# "--time-limit 180 --time-before-partition 20 --partition-duration 10 --network-partition random-partition-halves --net-ticktime 15 --consumer-type mixed"
-	# "--time-limit 180 --time-before-partition 20 --partition-duration 10 --network-partition partition-halves --net-ticktime 15 --consumer-type mixed"
-	# "--time-limit 180 --time-before-partition 20 --partition-duration 10 --network-partition partition-majorities-ring --net-ticktime 15 --consumer-type mixed"
-	# "--time-limit 180 --time-before-partition 20 --partition-duration 10 --network-partition partition-random-node --net-ticktime 15 --consumer-type mixed"
-	# "--time-limit 180 --time-before-partition 20 --partition-duration 10 --network-partition partition-random-node --net-ticktime 15 --consumer-type asynchronous"
-	# "--time-limit 180 --time-before-partition 20 --partition-duration 10 --network-partition partition-random-node --net-ticktime 15 --consumer-type polling"
- #    "--time-limit 180 --time-before-partition 20 --partition-duration 30 --network-partition random-partition-halves --net-ticktime 15 --consumer-type mixed --dead-letter true"
-	# "--time-limit 180 --time-before-partition 20 --partition-duration 30 --network-partition partition-halves --net-ticktime 15 --consumer-type mixed --dead-letter true"
+	"--time-limit 180 --time-before-partition 20 --partition-duration 30 --network-partition partition-halves --net-ticktime 15 --consumer-type mixed"
+	"--time-limit 180 --time-before-partition 20 --partition-duration 30 --network-partition partition-majorities-ring --net-ticktime 15 --consumer-type mixed"
+	"--time-limit 180 --time-before-partition 20 --partition-duration 30 --network-partition partition-random-node --net-ticktime 15 --consumer-type mixed"
+	"--time-limit 180 --time-before-partition 20 --partition-duration 10 --network-partition random-partition-halves --net-ticktime 15 --consumer-type mixed"
+	"--time-limit 180 --time-before-partition 20 --partition-duration 10 --network-partition partition-halves --net-ticktime 15 --consumer-type mixed"
+	"--time-limit 180 --time-before-partition 20 --partition-duration 10 --network-partition partition-majorities-ring --net-ticktime 15 --consumer-type mixed"
+	"--time-limit 180 --time-before-partition 20 --partition-duration 10 --network-partition partition-random-node --net-ticktime 15 --consumer-type mixed"
+	"--time-limit 180 --time-before-partition 20 --partition-duration 10 --network-partition partition-random-node --net-ticktime 15 --consumer-type asynchronous"
+	"--time-limit 180 --time-before-partition 20 --partition-duration 10 --network-partition partition-random-node --net-ticktime 15 --consumer-type polling"
+    "--time-limit 180 --time-before-partition 20 --partition-duration 30 --network-partition random-partition-halves --net-ticktime 15 --consumer-type mixed --dead-letter true"
+	"--time-limit 180 --time-before-partition 20 --partition-duration 30 --network-partition partition-halves --net-ticktime 15 --consumer-type mixed --dead-letter true"
 )
 
 TESTS_COUNT=${#JEPSEN_TESTS_PARAMETERS[@]}

@@ -1,0 +1,42 @@
+name: Jepsen Tests for RabbitMQ 3.13
+on:
+  workflow_dispatch:
+    inputs:
+      rabbitmq_version:
+        description: 'RabbitMQ version from https://github.com/rabbitmq/rabbitmq-server-binaries-dev/releases (e.g. 3.13.0-alpha.278)'
+        required: true
+        type: string
+  repository_dispatch:
+    types: [new_alpha_313]
+
+concurrency:
+  group: jepsen-313
+
+env:
+  RABBITMQ_BRANCH: 313
+  RABBITMQ_VERSION: ${{ inputs.rabbitmq_version != '' && inputs.rabbitmq_version || github.event.client_payload.version }}
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    container:
+      image: pivotalrabbitmq/jepsen
+    steps:
+      - uses: actions/checkout@v4
+      - name: Jepsen tests 
+        run: ci/jepsen-test.sh
+        env:
+          GCP_JEPSEN_CREDENTIALS: ${{ secrets.GCP_JEPSEN_CREDENTIALS }}
+          GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
+      - name: Stop cluster
+        if: always()
+        working-directory: terraform-state
+        run: |
+          terraform init
+          terraform destroy -auto-approve -var="rabbitmq_branch=$RABBITMQ_BRANCH"
+      - name: Delete configuration
+        if: always()
+        run: |
+          rm jepsen-bot.json
+          rm -rf terraform-state
+          rm -rf terraform.tfstate
