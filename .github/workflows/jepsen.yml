@@ -1,27 +1,19 @@
-name: Jepsen Tests for RabbitMQ ${{ inputs.rabbitmq_branch != '' && inputs.rabbitmq_branch || github.event.client_payload.branch }}
+name: Jepsen Tests for RabbitMQ 3.12
 on:
   workflow_dispatch:
     inputs:
-      rabbitmq_branch:
-        description: 'Branch, e.g. 312 for 3.12, just a namespace for the flow'
-        required: true
-        default: '312'
-        type: choice
-        options:
-          - 312
-          - 313
       rabbitmq_version:
         description: 'RabbitMQ version from https://github.com/rabbitmq/rabbitmq-server-binaries-dev/releases (e.g. 3.13.0-alpha.278)'
         required: true
         type: string
   repository_dispatch:
-    types: [new_alpha]
+    types: [new_alpha_312]
 
 concurrency:
-  group: jepsen-${{ inputs.rabbitmq_branch != '' && inputs.rabbitmq_branch || github.event.client_payload.branch }}
+  group: jepsen-312
 
 env:
-  RABBITMQ_BRANCH: ${{ inputs.rabbitmq_branch != '' && inputs.rabbitmq_branch || github.event.client_payload.branch }}
+  RABBITMQ_BRANCH: 312
   RABBITMQ_VERSION: ${{ inputs.rabbitmq_version != '' && inputs.rabbitmq_version || github.event.client_payload.version }}
 
 jobs:
@@ -31,8 +23,6 @@ jobs:
       image: pivotalrabbitmq/jepsen
     steps:
       - uses: actions/checkout@v4
-      - name: Dump context
-        uses: crazy-max/ghaction-dump-context@v2
       - name: Jepsen tests 
         run: ci/jepsen-test.sh
         env:
