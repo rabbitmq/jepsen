@@ -1,8 +1,15 @@
-name: Jepsen Tests for RabbitMQ 3.12
-
+name: Jepsen Tests for RabbitMQ ${{ inputs.rabbitmq_branch != '' && inputs.rabbitmq_branch || github.event.client_payload.branch }}
 on:
   workflow_dispatch:
     inputs:
+      rabbitmq_branch:
+        description: 'Branch, e.g. 312 for 3.12, just a namespace for the flow'
+        required: true
+        default: '312'
+        type: choice
+        options:
+          - 312
+          - 313
       rabbitmq_version:
         description: 'RabbitMQ version from https://github.com/rabbitmq/rabbitmq-server-binaries-dev/releases (e.g. 3.13.0-alpha.278)'
         required: true
@@ -11,11 +18,11 @@ on:
     types: [new_alpha]
 
 concurrency:
-  group: jepsen
+  group: jepsen-${{ inputs.rabbitmq_branch != '' && inputs.rabbitmq_branch || github.event.client_payload.branch }}
 
 env:
-  RABBITMQ_BRANCH: "312"
-  RABBITMQ_VERSION: ${{ inputs.rabbitmq_version != '' && inputs.rabbitmq_version || github.event.client_payload.version}}
+  RABBITMQ_BRANCH: ${{ inputs.rabbitmq_branch != '' && inputs.rabbitmq_branch || github.event.client_payload.branch }}
+  RABBITMQ_VERSION: ${{ inputs.rabbitmq_version != '' && inputs.rabbitmq_version || github.event.client_payload.version }}
 
 jobs:
   test:
@@ -24,6 +31,8 @@ jobs:
       image: pivotalrabbitmq/jepsen
     steps:
       - uses: actions/checkout@v4
+      - name: Dump context
+        uses: crazy-max/ghaction-dump-context@v2
       - name: Jepsen tests 
         run: ci/jepsen-test.sh
         env:
@@ -34,7 +43,7 @@ jobs:
         working-directory: terraform-state
         run: |
           terraform init
-          terraform destroy -auto-approve -var="rabbitmq_branch=$RABBITMQ_BRANCH" 
+          terraform destroy -auto-approve -var="rabbitmq_branch=$RABBITMQ_BRANCH"
       - name: Delete configuration
         if: always()
         run: |
