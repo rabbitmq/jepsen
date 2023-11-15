@@ -23,7 +23,7 @@ jobs:
       image: pivotalrabbitmq/jepsen
     steps:
       - uses: actions/checkout@v4
-      - name: Jepsen tests 
+      - name: Jepsen tests on Rabbitmq ${{ env.RABBITMQ_VERSION }}
         run: ci/jepsen-test.sh
         env:
           GCP_JEPSEN_CREDENTIALS: ${{ secrets.GCP_JEPSEN_CREDENTIALS }}
