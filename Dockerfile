@@ -9,7 +9,7 @@
 ## the License for the specific language governing rights and
 ## limitations under the License.
 #
-# Copyright (c) 2023 VMware, Inc. or its affiliates.  All rights reserved.
+# Copyright (c) 2023 Broadcom. All Rights Reserved. The term Broadcom refers to Broadcom Inc. and/or its subsidiaries.
 
 FROM debian:buster
 
