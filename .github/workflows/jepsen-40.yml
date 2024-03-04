@@ -1,4 +1,4 @@
-name: Jepsen Tests for RabbitMQ 3.12
+name: Jepsen Tests for RabbitMQ 4.0
 on:
   workflow_dispatch:
     inputs:
@@ -7,13 +7,13 @@ on:
         required: true
         type: string
   repository_dispatch:
-    types: [new_alpha_312]
+    types: [new_alpha_40]
 
 concurrency:
-  group: jepsen-312
+  group: jepsen-40
 
 env:
-  RABBITMQ_BRANCH: 312
+  RABBITMQ_BRANCH: 40
   RABBITMQ_VERSION: ${{ inputs.rabbitmq_version != '' && inputs.rabbitmq_version || github.event.client_payload.version }}
 
 jobs:
