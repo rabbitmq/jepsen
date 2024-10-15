@@ -20,7 +20,7 @@ jobs:
   test:
     runs-on: ubuntu-24.04
     container:
-      image: pivotalrabbitmq/jepsen:aws
+      image: pivotalrabbitmq/jepsen
     steps:
       - uses: actions/checkout@v4
       - name: Jepsen tests on Rabbitmq ${{ env.RABBITMQ_VERSION }}

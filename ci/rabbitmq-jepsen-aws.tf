@@ -57,7 +57,7 @@ resource "aws_instance" "jepsen_controller" {
 }
 
 resource "aws_instance" "jepsen_worker" {
-  count = 3
+  count = 5
   ami           = data.aws_ami.debian.id
   instance_type = "t3.small"
   associate_public_ip_address = true
