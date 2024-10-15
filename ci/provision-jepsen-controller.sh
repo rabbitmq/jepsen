@@ -11,7 +11,7 @@ sudo apt-get install -y -V --fix-missing --no-install-recommends wget git make g
 
 # install Java 8 (needed by Jepsen)
 export JAVA_PATH="/usr/lib/jdk-8"
-sudo wget --progress dot:giga --output-document "$JAVA_PATH.tar.gz" https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u392-b08/OpenJDK8U-jdk_x64_linux_hotspot_8u392b08.tar.gz
+sudo wget --progress dot:giga --output-document "$JAVA_PATH.tar.gz" https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u422-b05/OpenJDK8U-jdk_x64_linux_hotspot_8u422b05.tar.gz
 sudo mkdir $JAVA_PATH
 sudo tar --extract --file "$JAVA_PATH.tar.gz" --directory "$JAVA_PATH" --strip-components 1
 export JAVA_HOME=$JAVA_PATH
