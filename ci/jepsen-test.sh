@@ -194,7 +194,6 @@ do
 	((WORKER_INDEX++))
 done
 
-echo "Logs & Data Download Link: https://console.cloud.google.com/storage/browser/jepsen-tests-logs?prefix=qq-jepsen-$RABBITMQ_BRANCH-$the_date"
 echo "Download logs: aws s3 cp s3://jepsen-tests-logs/ . --recursive --exclude '*' --include 'qq-jepsen-$RABBITMQ_BRANCH-$the_date*'"
 
 if [ "$failure" = true ]; then
