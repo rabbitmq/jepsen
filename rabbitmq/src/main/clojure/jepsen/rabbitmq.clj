@@ -232,9 +232,9 @@
             )
       )
 
-(def value (atom -1))
+(def enqueue-value (atom -1))
 (defn enqueue   [_ _]
-  {:type :invoke, :f :enqueue, :value (swap! value inc)})
+  {:type :invoke, :f :enqueue, :value (swap! enqueue-value inc)})
 (defn dequeue   [_ _] {:type :invoke, :f :dequeue})
 
 (defn rabbit-test
