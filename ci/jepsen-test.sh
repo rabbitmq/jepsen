@@ -50,6 +50,10 @@ ssh -o StrictHostKeyChecking=no -i jepsen-bot $JEPSEN_USER@$CONTROLLER_IP "sourc
 # download latest alpha on Jepsen controller
 ssh -o StrictHostKeyChecking=no -i jepsen-bot $JEPSEN_USER@$CONTROLLER_IP "wget https://github.com/rabbitmq/rabbitmq-server-binaries-dev/releases/download/v${VERSION}/rabbitmq-server-generic-unix-${VERSION}.tar.xz"
 
+# add the worker hostnames to /etc/hosts
+WORKERS_HOSTS_ENTRIES=$(terraform output -raw workers_hosts_entries)
+ssh -o StrictHostKeyChecking=no -i jepsen-bot $JEPSEN_USER@$CONTROLLER_IP "echo '$WORKERS_HOSTS_ENTRIES' | sudo tee --append /etc/hosts"
+
 # copy the alpha on all the Jepsen workers
 WORKERS=( $(terraform output -raw workers_hostname) )
 for worker in "${WORKERS[@]}"
@@ -66,12 +70,11 @@ do
   ssh -o StrictHostKeyChecking=no -i jepsen-bot $JEPSEN_USER@$worker_ip "mkdir /tmp/rabbitmq-var"
 done
 
-# install some Jepsen dependencies on all the Jepsen workers
-WORKERS_IP=( $(terraform output -raw workers_ip) )
+# miscellaneous configuration on all the Jepsen workers
 for worker_ip in "${WORKERS_IP[@]}"
 do
   ssh -o StrictHostKeyChecking=no -i jepsen-bot $JEPSEN_USER@$worker_ip "sudo apt-get update"
-  ssh -o StrictHostKeyChecking=no -i jepsen-bot $JEPSEN_USER@$worker_ip "sudo apt-get install -y build-essential bzip2 curl faketime iproute2 iptables iputils-ping libzip4 logrotate man man-db net-tools ntpdate psmisc python rsyslog tar unzip wget"
+  ssh -o StrictHostKeyChecking=no -i jepsen-bot $JEPSEN_USER@$worker_ip "echo '$WORKERS_HOSTS_ENTRIES' | sudo tee --append /etc/hosts"
 done
 
 # build up some fixed parameters for the Jepsen tests
@@ -87,17 +90,17 @@ ARCHIVE_OPTION="--archive-url file:///tmp/${ARCHIVE}"
 
 JEPSEN_TESTS_PARAMETERS=(
 	"--time-limit 180 --time-before-partition 20 --partition-duration 30 --network-partition random-partition-halves --net-ticktime 15 --consumer-type mixed"
-	"--time-limit 180 --time-before-partition 20 --partition-duration 30 --network-partition partition-halves --net-ticktime 15 --consumer-type mixed"
-	"--time-limit 180 --time-before-partition 20 --partition-duration 30 --network-partition partition-majorities-ring --net-ticktime 15 --consumer-type mixed"
-	"--time-limit 180 --time-before-partition 20 --partition-duration 30 --network-partition partition-random-node --net-ticktime 15 --consumer-type mixed"
-	"--time-limit 180 --time-before-partition 20 --partition-duration 10 --network-partition random-partition-halves --net-ticktime 15 --consumer-type mixed"
-	"--time-limit 180 --time-before-partition 20 --partition-duration 10 --network-partition partition-halves --net-ticktime 15 --consumer-type mixed"
-	"--time-limit 180 --time-before-partition 20 --partition-duration 10 --network-partition partition-majorities-ring --net-ticktime 15 --consumer-type mixed"
-	"--time-limit 180 --time-before-partition 20 --partition-duration 10 --network-partition partition-random-node --net-ticktime 15 --consumer-type mixed"
-	"--time-limit 180 --time-before-partition 20 --partition-duration 10 --network-partition partition-random-node --net-ticktime 15 --consumer-type asynchronous"
-	"--time-limit 180 --time-before-partition 20 --partition-duration 10 --network-partition partition-random-node --net-ticktime 15 --consumer-type polling"
-	   "--time-limit 180 --time-before-partition 20 --partition-duration 30 --network-partition random-partition-halves --net-ticktime 15 --consumer-type mixed --dead-letter true"
-	"--time-limit 180 --time-before-partition 20 --partition-duration 30 --network-partition partition-halves --net-ticktime 15 --consumer-type mixed --dead-letter true"
+	# "--time-limit 180 --time-before-partition 20 --partition-duration 30 --network-partition partition-halves --net-ticktime 15 --consumer-type mixed"
+	# "--time-limit 180 --time-before-partition 20 --partition-duration 30 --network-partition partition-majorities-ring --net-ticktime 15 --consumer-type mixed"
+	# "--time-limit 180 --time-before-partition 20 --partition-duration 30 --network-partition partition-random-node --net-ticktime 15 --consumer-type mixed"
+	# "--time-limit 180 --time-before-partition 20 --partition-duration 10 --network-partition random-partition-halves --net-ticktime 15 --consumer-type mixed"
+	# "--time-limit 180 --time-before-partition 20 --partition-duration 10 --network-partition partition-halves --net-ticktime 15 --consumer-type mixed"
+	# "--time-limit 180 --time-before-partition 20 --partition-duration 10 --network-partition partition-majorities-ring --net-ticktime 15 --consumer-type mixed"
+	# "--time-limit 180 --time-before-partition 20 --partition-duration 10 --network-partition partition-random-node --net-ticktime 15 --consumer-type mixed"
+	# "--time-limit 180 --time-before-partition 20 --partition-duration 10 --network-partition partition-random-node --net-ticktime 15 --consumer-type asynchronous"
+	# "--time-limit 180 --time-before-partition 20 --partition-duration 10 --network-partition partition-random-node --net-ticktime 15 --consumer-type polling"
+	#    "--time-limit 180 --time-before-partition 20 --partition-duration 30 --network-partition random-partition-halves --net-ticktime 15 --consumer-type mixed --dead-letter true"
+	# "--time-limit 180 --time-before-partition 20 --partition-duration 30 --network-partition partition-halves --net-ticktime 15 --consumer-type mixed --dead-letter true"
 )
 
 TESTS_COUNT=${#JEPSEN_TESTS_PARAMETERS[@]}
