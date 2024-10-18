@@ -5,19 +5,18 @@ set -ex
 # script to provision and configure the Jepsen controller
 # this controller will run the Jepsen tests
 
-# install Erlang a few utilities
 sudo apt-get update
 sudo apt-get install -y -V --fix-missing --no-install-recommends wget git make gnuplot
 
-# install Java 8 (needed by Jepsen)
-export JAVA_PATH="/usr/lib/jdk-8"
-sudo wget --progress dot:giga --output-document "$JAVA_PATH.tar.gz" https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u422-b05/OpenJDK8U-jdk_x64_linux_hotspot_8u422b05.tar.gz
-sudo mkdir $JAVA_PATH
-sudo tar --extract --file "$JAVA_PATH.tar.gz" --directory "$JAVA_PATH" --strip-components 1
-export JAVA_HOME=$JAVA_PATH
-export PATH=$PATH:$JAVA_HOME/bin
-echo "export JAVA_HOME=$JAVA_PATH" >> .profile
-echo "export PATH=$PATH:$JAVA_PATH/bin" >> .profile
+# install Java
+export JAVA_PATH="/usr/lib/jdk-21"
+JAVA_URL="https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.5%2B11/OpenJDK21U-jdk_x64_linux_hotspot_21.0.5_11.tar.gz"
+wget --progress dot:giga --output-document jdk.tar.gz $JAVA_URL
+
+sudo mkdir -p $JAVA_PATH
+sudo tar --extract --file jdk.tar.gz --directory "$JAVA_PATH" --strip-components 1
+rm jdk.tar.gz
+sudo ln -s "$JAVA_PATH/bin/java" /usr/bin/java
 
 # install lein (to compile and launch the Jepsen tests)
 wget https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/lein

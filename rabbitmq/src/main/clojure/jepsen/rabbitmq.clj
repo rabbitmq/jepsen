@@ -8,7 +8,6 @@
                     [control :as c]
                     [db :as db]
                     [generator :as gen]
-                    [independent :as independent]
                     [nemesis :as nemesis]
                     [tests :as tests]
                     [util :as util :refer [timeout]]
@@ -39,8 +38,8 @@
               (try (c/exec* "erl -noshell -eval \"\\$2 /= hd(erlang:system_info(otp_release)) andalso halt(2).\" -run init stop")
                     (catch Exception e
                       (info "Erlang not detected, installing it...")
-                      (c/exec :echo "deb https://ppa1.novemberain.com/rabbitmq/rabbitmq-erlang/deb/debian buster main" :>> "/etc/apt/sources.list.d/rabbitmq-erlang.list")
-                      (c/exec :echo "deb https://ppa2.novemberain.com/rabbitmq/rabbitmq-erlang/deb/debian buster main" :>> "/etc/apt/sources.list.d/rabbitmq-erlang.list")
+                      (c/exec :echo "deb https://ppa1.novemberain.com/rabbitmq/rabbitmq-erlang/deb/debian bookworm main" :>> "/etc/apt/sources.list.d/rabbitmq-erlang.list")
+                      (c/exec :echo "deb https://ppa2.novemberain.com/rabbitmq/rabbitmq-erlang/deb/debian bookworm main" :>> "/etc/apt/sources.list.d/rabbitmq-erlang.list")
                       (info "downloading RabbitMQ repository signature")
                       (let [signature_file (cu/wget! "https://github.com/rabbitmq/signing-keys/releases/download/3.0/cloudsmith.rabbitmq-erlang.E495BB49CC4BBE5B.key")]
                         (c/exec :apt-key :add signature_file))
@@ -54,10 +53,11 @@
                       (info "apt-update")
                       (debian/update!)
                       (info "Installing Erlang")
-                      (debian/install [:socat :erlang-base :erlang-asn1 :erlang-crypto :erlang-eldap :erlang-ftp :erlang-inets :erlang-mnesia :erlang-os-mon :erlang-parsetools :erlang-public-key :erlang-runtime-tools :erlang-snmp :erlang-ssl :erlang-syntax-tools :erlang-tftp :erlang-tools :erlang-xmerl]
+                      (debian/install [:socat :xz-utils :erlang-base :erlang-asn1 :erlang-crypto :erlang-eldap :erlang-ftp :erlang-inets :erlang-mnesia :erlang-os-mon :erlang-parsetools :erlang-public-key :erlang-runtime-tools :erlang-snmp :erlang-ssl :erlang-syntax-tools :erlang-tftp :erlang-tools :erlang-xmerl]
                                       )))
 
               (info "Downloading RabbitMQ " (test :archive-url))
+              (c/exec :mkdir :-p "/tmp/rabbitmq-server")
               (cu/install-archive! (str (test :archive-url)) "/tmp/rabbitmq-server")
 
               ; Update config
@@ -232,6 +232,11 @@
             )
       )
 
+(def enqueue-value (atom -1))
+(defn enqueue   [_ _]
+  {:type :invoke, :f :enqueue, :value (swap! enqueue-value inc)})
+(defn dequeue   [_ _] {:type :invoke, :f :dequeue})
+
 (defn rabbit-test
   "Given an options map from the command-line runner (e.g. :nodes, :ssh,
   :concurrency, ...), constructs a test map."
@@ -239,7 +244,8 @@
   (info :opts opts)
   (let [nemesis (init-nemesis opts)]
   (merge tests/noop-test
-         {:name       "rabbitmq-simple-partition"
+         {:pure-generators true
+          :name       "rabbitmq-simple-partition"
           :os         debian/os
           :db         (db)
           :client     (queue-client)
@@ -247,25 +253,23 @@
           :checker (checker/compose
                      {:perf   (checker/perf)
                       :queue (checker/total-queue)
-                      ; :timeline (timeline/html)
                       })
           :generator  (gen/phases
-                        (->> (gen/queue)
+                        (->> (gen/mix [enqueue dequeue])
                              ; FIXME could gen/stagger introduce good randomness? 
                              (gen/delay (/ (:rate opts)))
                              (gen/nemesis
-                               (gen/seq
                                  (cycle [(gen/sleep (:time-before-partition opts))
                                          {:type :info :f :start}
                                          (gen/sleep (:partition-duration opts))
-                                         {:type :info :f :stop}])))
+                                         {:type :info :f :stop}]))
                              (gen/time-limit (:time-limit opts)))
                         (gen/nemesis
                           (gen/once {:type :info, :f :stop}))
                         (gen/log "waiting for recovery")
                         (gen/sleep 20)
                         (gen/clients
-                          (gen/each
+                          (gen/each-thread
                             (gen/once {:type :invoke
                                        :f    :drain}))))}
          opts)
@@ -292,7 +296,7 @@
     :parse-fn parse-long
     :validate [pos? "Must be a positive integer."]]
    [nil "--archive-url URL" "URL to retrieve RabbitMQ Generic Unix archive"
-    :default "https://github.com/rabbitmq/rabbitmq-server/releases/download/v3.12.8/rabbitmq-server-generic-unix-3.12.8.tar.xz"
+    :default "https://github.com/rabbitmq/rabbitmq-server/releases/download/v4.0.2/rabbitmq-server-generic-unix-4.0.2.tar.xz"
     :parse-fn read-string]
    [nil "--network-partition NAME" "Which network partition strategy to use. Default is random-partition-halves"
     :default  "random-partition-halves"

@@ -6,11 +6,12 @@
   :main jepsen.rabbitmq
   :source-paths ["src/main/clojure"]
   :java-source-paths ["src/main/java"]
-  :javac-options     ["-target" "1.8" "-source" "1.8"]
   :jvm-opts ["-Dcom.sun.management.jmxremote"]
-  :dependencies [[org.clojure/clojure "1.10.0"]
-                 [jepsen "0.1.19"]
-                 [com.rabbitmq/amqp-client "5.20.0" ]]
+  :dependencies [[org.clojure/clojure "1.12.0"]
+                 [jepsen "0.3.5"]
+                 [com.rabbitmq/amqp-client "5.22.0"
+                  :exclusions [org.slf4j/slf4j-api]]
+                 ]
   :exclusions [org.slf4j/log4j-over-slf4j
                log4j/log4j]
 )
