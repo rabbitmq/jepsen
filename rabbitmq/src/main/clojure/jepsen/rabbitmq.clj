@@ -275,11 +275,6 @@
          opts)
          ))
 
-(defn parse-long
-      "Parses a string to a Long. Passes through `nil`."
-      [s]
-      (when s (Long/parseLong s)))
-
 (def cli-opts
   "Additional command line options."
   [
