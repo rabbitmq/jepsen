@@ -279,7 +279,7 @@
   "Additional command line options."
   [
    ["-r" "--rate HZ" "Approximate number of enqueue/dequeue per second, per thread."
-    :default  10
+    :default  50
     :parse-fn read-string
     :validate [#(and (number? %) (pos? %)) "Must be a positive number"]] 
    [nil "--partition-duration NUM" "Duration of partition (in seconds)"
