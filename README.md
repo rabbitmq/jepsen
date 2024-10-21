@@ -21,7 +21,7 @@ Inside the control container, `cd` into the test directory and list the test aav
 
 
 ```
-cd rabbitmq
+cd /root/rabbitmq
 lein run test --help
 ```
 
@@ -35,18 +35,22 @@ The first run can take a while because of the provisioning of the nodes.
 The console output is like the following if the run is successful:
 
 ```
-INFO [2019-04-18 07:39:40,503] jepsen test runner - jepsen.core {:ok-count 417,
- :duplicated-count 0,
- :valid? true,
- :lost-count 0,
- :lost #{},
- :acknowledged-count 415,
- :recovered #{221 167},
- :attempt-count 417,
- :unexpected #{},
- :unexpected-count 0,
- :recovered-count 2,
- :duplicated #{}}
+INFO [2024-10-21 12:48:18,043] jepsen test runner - jepsen.core {:perf {:latency-graph {:valid? true},
+        :rate-graph {:valid? true},
+        :valid? true},
+ :queue {:ok-count 726,
+         :duplicated-count 0,
+         :valid? true,
+         :lost-count 0,
+         :lost #{},
+         :acknowledged-count 725,
+         :recovered #{799},
+         :attempt-count 727,
+         :unexpected #{},
+         :unexpected-count 0,
+         :recovered-count 1,
+         :duplicated #{}},
+ :valid? true}
 
 
 Everything looks good! ヽ(‘ー`)ノ
