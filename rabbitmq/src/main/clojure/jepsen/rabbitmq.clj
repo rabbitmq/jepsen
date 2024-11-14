@@ -86,6 +86,14 @@
               )
               ; wait for the primary to come up
               (Thread/sleep 15000)
+              (let [p (core/primary test)]
+                (if (= node p)
+                  (do
+                    (info "Activating Khepri on first node")
+                    (c/exec* "/tmp/rabbitmq-server/sbin/rabbitmqctl enable_feature_flag --opt-in khepri_db")
+                  )
+                )
+              )
               (core/synchronize test)
               ; start the remaining nodes
               (let [p (core/primary test)]
@@ -95,6 +103,8 @@
                     (c/exec* "/tmp/rabbitmq-server/sbin/rabbitmq-server -detached")
                     (info "Waiting for 20 seconds")
                     (Thread/sleep 20000)
+                    (info "Activating Khepri")
+                    (c/exec* "/tmp/rabbitmq-server/sbin/rabbitmqctl enable_feature_flag --opt-in khepri_db")
                     (info "Stopping app")
                     (c/exec* "/tmp/rabbitmq-server/sbin/rabbitmqctl stop_app")    
                     (info "Stopped app")
