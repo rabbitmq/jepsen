@@ -6,6 +6,11 @@ on:
         description: 'RabbitMQ version from https://github.com/rabbitmq/rabbitmq-server-binaries-dev/releases (e.g. 3.13.0-alpha.278)'
         required: true
         type: string
+      skip_check:
+        description: 'Skip the last execution check'
+        default: false
+        required: true
+        type: boolean
   repository_dispatch:
     types: [new_alpha_40]
 
@@ -15,9 +20,28 @@ concurrency:
 env:
   RABBITMQ_BRANCH: 40
   RABBITMQ_VERSION: ${{ inputs.rabbitmq_version != '' && inputs.rabbitmq_version || github.event.client_payload.version }}
+  SKIP_CHECK: ${{ inputs.skip_check != '' && inputs.skip_check || false }}
+  LAST_EXECUTION_ARTIFACT: "last-execution-jepsen-rabbitmq-4-0"
 
 jobs:
-  test:
+  check-last-execution-time:
+    runs-on: ubuntu-24.04
+    outputs:
+      allow_execution: ${{ steps.check.outputs.allow_execution }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check last execution
+        id: check
+        run: ci/check-last-execution.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.LAST_EXECUTION_ARTIFACT }}
+          path: last-execution.txt
+  jepsen-test:
+    needs: check-last-execution-time
+    if: ${{ needs.check-last-execution-time.outputs.allow_execution == 'true' }}
     runs-on: ubuntu-24.04
     container:
       image: pivotalrabbitmq/jepsen

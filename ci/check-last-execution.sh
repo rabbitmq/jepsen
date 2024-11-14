@@ -4,27 +4,34 @@ CURRENT_TIME=$(date '+%s')
 
 echo "UTC is $(date --utc --rfc-3339=seconds --date=@$CURRENT_TIME)"
 
+gh run --repo rabbitmq/jepsen download --name $LAST_EXECUTION_ARTIFACT
+
 if [ -e last-execution.txt ]
 then
     LAST_EXECUTION=$(cat last-execution.txt)
     echo "Last execution was $(date --utc --rfc-3339=seconds --date=@$LAST_EXECUTION)"
-    echo $LAST_EXECUTION
     DIFF=$(($CURRENT_TIME - $LAST_EXECUTION))
-    echo $DIFF
     echo "Last execution was" $(date -ud "@$DIFF" +"$(( $DIFF/3600/24 )) day(s) %H hour(s) %M minute(s) %S second(s) ago")
-    LIMIT=60
+    LIMIT=86400
+    echo "Limit is" $(date -ud "@$LIMIT" +"$(( $LIMIT/3600/24 )) day(s) %H hour(s) %M minute(s) %S second(s)")
     if [ "$DIFF" -gt "$LIMIT" ]; then
         echo "Limit exceeded, allowing new execution."
         echo $CURRENT_TIME > last-execution.txt
-        NEW_EXECUTION=true
+        ALLOW_EXECUTION="true"
     else
-        echo "Limit exceeded, skipping new execution."
-        NEW_EXECUTION=false
+        echo "Limit not exceeded, skipping new execution."
+        ALLOW_EXECUTION="false"
     fi
 else
     echo $CURRENT_TIME > last-execution.txt
-    NEW_EXECUTION=true
+    ALLOW_EXECUTION=true
 fi
 
-cat last-execution.txt
-echo "New execution? $NEW_EXECUTION"
+if [ "$SKIP_CHECK" = true ] ; then
+    echo "Configured to skip check, ignoring result and forcing execution"
+    echo $CURRENT_TIME > last-execution.txt
+    ALLOW_EXECUTION="true"
+fi
+
+echo "Allow execution? $ALLOW_EXECUTION"
+echo "allow_execution=$ALLOW_EXECUTION" >> $GITHUB_OUTPUT
