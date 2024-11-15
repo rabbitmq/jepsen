@@ -25,7 +25,7 @@ env:
   RABBITMQ_BRANCH: 41
   RABBITMQ_VERSION: ${{ inputs.rabbitmq_version != '' && inputs.rabbitmq_version || github.event.client_payload.version }}
   TAG_NAME: ${{ inputs.tag_name != '' && inputs.tag_name || github.event.client_payload.tag_name }}
-  SKIP_CHECK: ${{ inputs.skip_check != '' && inputs.skip_check || true }}
+  SKIP_CHECK: ${{ inputs.skip_check != '' && inputs.skip_check || false }}
   LAST_EXECUTION_ARTIFACT: "last-execution-jepsen-rabbitmq-4-1"
 
 jobs:
