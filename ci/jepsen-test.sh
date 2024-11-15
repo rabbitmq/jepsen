@@ -4,6 +4,7 @@ set -ex
 
 VERSION=$RABBITMQ_VERSION
 ARCHIVE=rabbitmq-server-generic-unix-${VERSION}.tar.xz
+ARCHIVE_URL=https://github.com/rabbitmq/server-packages/releases/download/${TAG_NAME}/rabbitmq-server-generic-unix-${VERSION}.tar.xz
 
 set +x
 # create SSH key that will be used to connect to the Jepsen VMs
@@ -48,7 +49,7 @@ ssh -o StrictHostKeyChecking=no -i jepsen-bot $JEPSEN_USER@$CONTROLLER_IP 'bash 
 # makes sure the Jepsen test command line works
 ssh -o StrictHostKeyChecking=no -i jepsen-bot $JEPSEN_USER@$CONTROLLER_IP "source ~/.profile ; cd ~/jepsen/rabbitmq/ ; lein run test --help"
 # download latest alpha on Jepsen controller
-ssh -o StrictHostKeyChecking=no -i jepsen-bot $JEPSEN_USER@$CONTROLLER_IP "https://github.com/rabbitmq/server-packages/releases/download/${TAG_NAME}/rabbitmq-server-generic-unix-${VERSION}.tar.xz"
+ssh -o StrictHostKeyChecking=no -i jepsen-bot $JEPSEN_USER@$CONTROLLER_IP "wget $ARCHIVE_URL"
 
 
 # add the worker hostnames to /etc/hosts
