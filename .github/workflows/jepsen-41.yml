@@ -1,4 +1,4 @@
-name: Jepsen Tests for RabbitMQ 4.0
+name: Jepsen Tests for RabbitMQ 4.1
 on:
   workflow_dispatch:
     inputs:
