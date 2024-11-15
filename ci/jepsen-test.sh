@@ -48,7 +48,8 @@ ssh -o StrictHostKeyChecking=no -i jepsen-bot $JEPSEN_USER@$CONTROLLER_IP 'bash 
 # makes sure the Jepsen test command line works
 ssh -o StrictHostKeyChecking=no -i jepsen-bot $JEPSEN_USER@$CONTROLLER_IP "source ~/.profile ; cd ~/jepsen/rabbitmq/ ; lein run test --help"
 # download latest alpha on Jepsen controller
-ssh -o StrictHostKeyChecking=no -i jepsen-bot $JEPSEN_USER@$CONTROLLER_IP "wget https://github.com/rabbitmq/rabbitmq-server-binaries-dev/releases/download/v${VERSION}/rabbitmq-server-generic-unix-${VERSION}.tar.xz"
+ssh -o StrictHostKeyChecking=no -i jepsen-bot $JEPSEN_USER@$CONTROLLER_IP "https://github.com/rabbitmq/server-packages/releases/download/${TAG_NAME}/rabbitmq-server-generic-unix-${VERSION}.tar.xz"
+
 
 # add the worker hostnames to /etc/hosts
 WORKERS_HOSTS_ENTRIES=$(terraform output -raw workers_hosts_entries)

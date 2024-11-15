@@ -3,7 +3,11 @@ on:
   workflow_dispatch:
     inputs:
       rabbitmq_version:
-        description: 'RabbitMQ version from https://github.com/rabbitmq/rabbitmq-server-binaries-dev/releases (e.g. 3.13.0-alpha.278)'
+        description: 'RabbitMQ version from https://github.com/rabbitmq/server-packages (e.g. 4.1.0-alpha.3e509c9f)'
+        required: true
+        type: string
+      tag_name:
+        description: 'Tag of the release (e.g. alphas.1731626175221)'
         required: true
         type: string
       skip_check:
@@ -20,6 +24,7 @@ concurrency:
 env:
   RABBITMQ_BRANCH: 40
   RABBITMQ_VERSION: ${{ inputs.rabbitmq_version != '' && inputs.rabbitmq_version || github.event.client_payload.version }}
+  TAG_NAME: ${{ inputs.tag_name != '' && inputs.tag_name || github.event.client_payload.tag_name }}
   SKIP_CHECK: ${{ inputs.skip_check != '' && inputs.skip_check || false }}
   LAST_EXECUTION_ARTIFACT: "last-execution-jepsen-rabbitmq-4-0"
 
