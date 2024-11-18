@@ -20,7 +20,7 @@ on:
     types: [new_alpha_40, new_alpha_41]
 
 concurrency:
-  group: ${{ inputs.concurrency_group != '' && inputs.concurrency_group || github.event.event_type }}
+  group: ${{ inputs.concurrency_group != '' && inputs.concurrency_group || github.event.action }}
   cancel-in-progress: false
 
 env:
