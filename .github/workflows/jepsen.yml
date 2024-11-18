@@ -1,4 +1,4 @@
-name: Jepsen Tests for RabbitMQ 4.1
+name: Jepsen Tests for RabbitMQ
 on:
   workflow_dispatch:
     inputs:
@@ -50,23 +50,21 @@ jobs:
       image: pivotalrabbitmq/jepsen
     steps:
       - uses: actions/checkout@v4
-      - name: Test
-        run: ci/test.sh
-      # - name: Jepsen tests on Rabbitmq ${{ env.RABBITMQ_VERSION }}
-      #   run: ci/jepsen-test.sh
-      #   env:
-      #     AWS_CONFIG: ${{ secrets.AWS_CONFIG }}
-      #     AWS_CREDENTIALS: ${{ secrets.AWS_CREDENTIALS }}
-      # - name: Stop cluster
-      #   if: always()
-      #   working-directory: terraform-state
-      #   run: |
-      #     terraform init
-      #     terraform destroy -auto-approve -var="rabbitmq_branch=$RABBITMQ_BRANCH"
-      #     aws ec2 delete-key-pair --no-cli-pager --key-name "jepsen-qq-$RABBITMQ_BRANCH-key"
-      # - name: Delete configuration
-      #   if: always()
-      #   run: |
-      #     rm -rf ~/.aws
-      #     rm -rf terraform-state
-      #     rm -rf terraform.tfstate
+      - name: Jepsen tests on RabbitMQ
+        run: ci/jepsen-test.sh
+        env:
+          AWS_CONFIG: ${{ secrets.AWS_CONFIG }}
+          AWS_CREDENTIALS: ${{ secrets.AWS_CREDENTIALS }}
+      - name: Stop cluster
+        if: always()
+        working-directory: terraform-state
+        run: |
+          terraform init
+          terraform destroy -auto-approve -var="rabbitmq_branch=$RABBITMQ_BRANCH"
+          aws ec2 delete-key-pair --no-cli-pager --key-name "jepsen-qq-$RABBITMQ_BRANCH-key"
+      - name: Delete configuration
+        if: always()
+        run: |
+          rm -rf ~/.aws
+          rm -rf terraform-state
+          rm -rf terraform.tfstate
