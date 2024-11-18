@@ -1,6 +1,8 @@
 #!/bin/bash
 
 CURRENT_TIME=$(date '+%s')  
+RABBITMQ_BRANCH=$(ci/extract-rabbitmq-branch-from-binary-url.sh $BINARY_URL)
+LAST_EXECUTION_ARTIFACT="last-execution-jepsen-rabbitmq-$RABBITMQ_BRANCH"
 
 echo "UTC is $(date --utc --rfc-3339=seconds --date=@$CURRENT_TIME)"
 
@@ -35,3 +37,4 @@ fi
 
 echo "Allow execution? $ALLOW_EXECUTION"
 echo "allow_execution=$ALLOW_EXECUTION" >> $GITHUB_OUTPUT
+echo "LAST_EXECUTION_ARTIFACT=$LAST_EXECUTION_ARTIFACT" >> $GITHUB_ENV
