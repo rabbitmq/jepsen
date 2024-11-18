@@ -3,6 +3,7 @@
 set -ex
 
 RABBITMQ_BRANCH=$(ci/extract-rabbitmq-branch-from-binary-url.sh $BINARY_URL)
+ARCHIVE=$(basename $BINARY_URL)
 
 set +x
 # create SSH key that will be used to connect to the Jepsen VMs
