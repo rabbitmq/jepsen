@@ -51,6 +51,14 @@ jobs:
       image: pivotalrabbitmq/jepsen
     steps:
       - uses: actions/checkout@v4
+      - name: Check binary signature
+        run: |
+          curl -L https://github.com/rabbitmq/signing-keys/releases/download/3.0/rabbitmq-release-signing-key.asc --output rabbitmq-release-signing-key.asc
+          gpg --import rabbitmq-release-signing-key.asc
+          wget $BINARY_URL
+          wget $BINARY_URL.asc
+          BINARY_FILENAME=$(basename $BINARY_URL)
+          gpg --verify $BINARY_FILENAME.asc $BINARY_FILENAME
       - name: Jepsen tests on RabbitMQ
         run: ci/jepsen-test.sh
         env:
