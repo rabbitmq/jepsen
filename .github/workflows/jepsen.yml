@@ -25,6 +25,7 @@ concurrency:
 
 env:
   BINARY_URL: ${{ inputs.binary_url != '' && inputs.binary_url || github.event.client_payload.binary_url }}
+  SKIP_CHECK: ${{ inputs.skip_check != '' && inputs.skip_check || false }}
 
 jobs:
   check-last-execution-time:
