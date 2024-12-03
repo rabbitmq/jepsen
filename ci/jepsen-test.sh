@@ -185,7 +185,7 @@ the_date=$(date '+%Y%m%d-%H%M%S')
 archive_name="qq-jepsen-$RABBITMQ_BRANCH-$the_date-jepsen-logs"
 archive_file="$archive_name.tar.gz"
 ssh -o StrictHostKeyChecking=no -i jepsen-bot $JEPSEN_USER@$CONTROLLER_IP "$SOURCE_AND_CD ; tar -zcf - store --transform='s/^store/${archive_name}/'" > $archive_file
-aws s3 cp $archive_file s3://jepsen-tests-logs/
+aws s3 cp $archive_file s3://jepsen-tests-logs/ --quiet
 
 WORKER_INDEX=0
 for worker_ip in "${WORKERS_IP[@]}"
@@ -194,7 +194,7 @@ do
 	var_archive_file="$var_archive_name.tar.gz"
 	ssh -o StrictHostKeyChecking=no -i jepsen-bot $JEPSEN_USER@$worker_ip \
 		"cd /tmp ; tar -zcf - rabbitmq-var --transform='s/^rabbitmq-var/${var_archive_name}/'" > $var_archive_file
-  aws s3 cp $var_archive_file s3://jepsen-tests-logs/
+  aws s3 cp $var_archive_file s3://jepsen-tests-logs/ --quiet
 	((WORKER_INDEX++))
 done
 
