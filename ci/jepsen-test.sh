@@ -124,6 +124,9 @@ do
     ssh -o StrictHostKeyChecking=no -i jepsen-bot \
         $JEPSEN_USER@$CONTROLLER_IP \
         "ssh -o StrictHostKeyChecking=no -i ~/jepsen-bot $JEPSEN_USER@$worker 'sudo /tmp/rabbitmq-server/sbin/rabbitmqctl list_connections'"
+    ssh -o StrictHostKeyChecking=no -i jepsen-bot \
+        $JEPSEN_USER@$CONTROLLER_IP \
+        "ssh -o StrictHostKeyChecking=no -i ~/jepsen-bot $JEPSEN_USER@$worker 'sudo /tmp/rabbitmq-server/sbin/rabbitmqctl list_consumers'"
 	ssh -o StrictHostKeyChecking=no -i jepsen-bot \
 		$JEPSEN_USER@$CONTROLLER_IP \
 		"ssh -o StrictHostKeyChecking=no -i ~/jepsen-bot $JEPSEN_USER@$worker 'sudo /tmp/rabbitmq-server/sbin/rabbitmqctl list_queues'"
