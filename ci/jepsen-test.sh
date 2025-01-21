@@ -139,6 +139,18 @@ do
 	ssh -o StrictHostKeyChecking=no -i jepsen-bot \
 		$JEPSEN_USER@$CONTROLLER_IP \
 		"ssh -o StrictHostKeyChecking=no -i ~/jepsen-bot $JEPSEN_USER@$worker 'mkdir /tmp/rabbitmq-var/test-$TEST_INDEX-attempt-$n ; cp -R /tmp/rabbitmq-server/var/* /tmp/rabbitmq-var/test-$TEST_INDEX-attempt-$n'"
+    echo "Checking number of messages in queues"
+    while IFS= read -r line; do
+        echo "$line"
+        line=$(echo $line | tr --delete '"')
+        queue=$(echo $line | cut --delimiter ',' --fields 1)
+        messages=$(echo $line | cut --delimiter ',' --fields 2)
+        echo "Queue '$queue' has $messages message(s)"
+        if [ $messages -ne 0 ]; then
+            echo "Test $TEST_INDEX / $TESTS_COUNT failed, queue '$queue' should be empty but contains $messages message(s)"
+			failure=true
+        fi
+    done <<< "$(ssh -o StrictHostKeyChecking=no -i ~/jepsen-bot $JEPSEN_USER@$worker 'sudo /tmp/rabbitmq-server/sbin/rabbitmqctl list_queues --silent --formatter csv name,messages | tail -n +2')"
 	done
     ssh -o StrictHostKeyChecking=no -i jepsen-bot $JEPSEN_USER@$CONTROLLER_IP "$SOURCE_AND_CD ; head -n 50 store/current/jepsen.log"
     ssh -o StrictHostKeyChecking=no -i jepsen-bot $JEPSEN_USER@$CONTROLLER_IP "$SOURCE_AND_CD ; tail -n 100 store/current/jepsen.log"
