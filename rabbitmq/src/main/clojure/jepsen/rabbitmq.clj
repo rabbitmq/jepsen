@@ -38,8 +38,8 @@
               (try (c/exec* "erl -noshell -eval \"\\$2 /= hd(erlang:system_info(otp_release)) andalso halt(2).\" -run init stop")
                     (catch Exception e
                       (info "Erlang not detected, installing it...")
-                      (c/exec :echo "deb https://ppa1.novemberain.com/rabbitmq/rabbitmq-erlang/deb/debian bookworm main" :>> "/etc/apt/sources.list.d/rabbitmq-erlang.list")
-                      (c/exec :echo "deb https://ppa2.novemberain.com/rabbitmq/rabbitmq-erlang/deb/debian bookworm main" :>> "/etc/apt/sources.list.d/rabbitmq-erlang.list")
+                      (c/exec :echo "deb https://ppa1.rabbitmq.com/rabbitmq/rabbitmq-erlang/deb/debian bookworm main" :>> "/etc/apt/sources.list.d/rabbitmq-erlang.list")
+                      (c/exec :echo "deb https://ppa2.rabbitmq.com/rabbitmq/rabbitmq-erlang/deb/debian bookworm main" :>> "/etc/apt/sources.list.d/rabbitmq-erlang.list")
                       (info "downloading RabbitMQ repository signature")
                       (let [signature_file (cu/wget! "https://github.com/rabbitmq/signing-keys/releases/download/3.0/cloudsmith.rabbitmq-erlang.E495BB49CC4BBE5B.key")]
                         (c/exec :apt-key :add signature_file))
@@ -301,7 +301,7 @@
     :parse-fn parse-long
     :validate [pos? "Must be a positive integer."]]
    [nil "--archive-url URL" "URL to retrieve RabbitMQ Generic Unix archive"
-    :default "https://github.com/rabbitmq/rabbitmq-server/releases/download/v4.0.2/rabbitmq-server-generic-unix-4.0.2.tar.xz"
+    :default "https://github.com/rabbitmq/rabbitmq-server/releases/download/v4.0.5/rabbitmq-server-generic-unix-4.0.5.tar.xz"
     :parse-fn read-string]
    [nil "--network-partition NAME" "Which network partition strategy to use. Default is random-partition-halves"
     :default  "random-partition-halves"
@@ -321,6 +321,9 @@
     :validate [consumer-types (cli/one-of consumer-types)]]
    [nil "--dead-letter FLAG" "Use dead letter queue and TTL on messages"
     :default false]
+   [nil "--quorum-initial-group-size NUM" "Quorum queue cluster size (default is the number of cluster nodes)"
+    :default  0
+    :parse-fn parse-long]
    ])
 
 (defn -main

@@ -75,17 +75,22 @@ public class Utils {
       deadLetter = Boolean.valueOf(deadLetterParameter.toString());
     }
 
+    int nodeCount = nodeCount(test);
+    int quorumInitialGroupSize = ((Number) get(test, ":quorum-initial-group-size")).intValue();
+
+    quorumInitialGroupSize = quorumInitialGroupSize <= 0 ? nodeCount : quorumInitialGroupSize;
+
     Client client;
     if ("asynchronous".equals(consumerType)) {
-      client = new AsynchronousConsumerClient(node.toString(), deadLetter);
+      client = new AsynchronousConsumerClient(node.toString(), deadLetter, quorumInitialGroupSize);
     } else if ("polling".equals(consumerType)) {
-      client = new BasicGetClient(node.toString(), deadLetter);
+      client = new BasicGetClient(node.toString(), deadLetter, quorumInitialGroupSize);
     } else if ("mixed".equals(consumerType)) {
       Random random = new Random();
       if (random.nextBoolean()) {
-        client = new AsynchronousConsumerClient(node.toString(), deadLetter);
+        client = new AsynchronousConsumerClient(node.toString(), deadLetter, quorumInitialGroupSize);
       } else {
-        client = new BasicGetClient(node.toString(), deadLetter);
+        client = new BasicGetClient(node.toString(), deadLetter, quorumInitialGroupSize);
       }
     } else {
       throw new IllegalArgumentException("Unknown consumer type: " + consumerType);
@@ -101,6 +106,10 @@ public class Utils {
       }
     }
     return null;
+  }
+
+  static int nodeCount(Map<Object, Object> test) {
+    return ((Collection<?>) get(test, ":nodes")).size();
   }
 
   public static void setup(Client client) throws Exception {
@@ -253,6 +262,7 @@ public class Utils {
     protected final Integer id;
     protected final String host;
     final boolean deadLetterMode;
+    private final int quorumInitialGroupSize;
     final String inboundQueue, outboundQueue;
     private final AtomicBoolean initialized = new AtomicBoolean(false);
     protected volatile Connection connection;
@@ -260,8 +270,9 @@ public class Utils {
 
     protected volatile Channel publishingChannel, consumingChannel;
 
-    protected AbstractClient(String host, boolean deadLetterMode) throws Exception {
+    protected AbstractClient(String host, boolean deadLetterMode, int quorumInitialGroupSize) throws Exception {
       this.host = host;
+      this.quorumInitialGroupSize = quorumInitialGroupSize;
       HOSTS.add(host);
       this.connection = createConnection();
       this.deadLetterMode = deadLetterMode;
@@ -334,7 +345,7 @@ public class Utils {
           try (Channel ch = connection.createChannel()) {
             Map<String, Object> queueArguments = new HashMap<>();
             queueArguments.put("x-queue-type", "quorum");
-            queueArguments.put("x-quorum-initial-group-size", 5);
+            queueArguments.put("x-quorum-initial-group-size", this.quorumInitialGroupSize);
             if (this.deadLetterMode) {
               queueArguments.put("x-dead-letter-exchange", "");
               queueArguments.put("x-dead-letter-routing-key", this.outboundQueue);
@@ -350,7 +361,7 @@ public class Utils {
               log("Declaring " + outboundQueue);
               queueArguments = new HashMap<>();
               queueArguments.put("x-queue-type", "quorum");
-              queueArguments.put("x-quorum-initial-group-size", 5);
+              queueArguments.put("x-quorum-initial-group-size", this.quorumInitialGroupSize);
               ch.queueDeclare(outboundQueue, true, false, false, queueArguments);
               Thread.sleep(1000);
               ch.queuePurge(outboundQueue);
@@ -464,8 +475,8 @@ public class Utils {
     private final Queue<Delivery> enqueued = new ConcurrentLinkedDeque<>();
     private final CountDownLatch cancelOkLatch = new CountDownLatch(1);
 
-    public AsynchronousConsumerClient(String host, boolean deadLetterMode) throws Exception {
-      super(host, deadLetterMode);
+    public AsynchronousConsumerClient(String host, boolean deadLetterMode, int quorumInitialGroupSize) throws Exception {
+      super(host, deadLetterMode, quorumInitialGroupSize);
       CLIENTS.add(this);
     }
 
@@ -551,8 +562,8 @@ public class Utils {
 
   static class BasicGetClient extends AbstractClient {
 
-    public BasicGetClient(String host, boolean deadLetterMode) throws Exception {
-      super(host, deadLetterMode);
+    public BasicGetClient(String host, boolean deadLetterMode, int quorumInitialGroupSize) throws Exception {
+      super(host, deadLetterMode, quorumInitialGroupSize);
       CLIENTS.add(this);
     }
 
