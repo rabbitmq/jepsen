@@ -150,7 +150,7 @@ do
             echo "Test $TEST_INDEX / $TESTS_COUNT failed, queue '$queue' should be empty but contains $messages message(s)"
 			failure=true
         fi
-    done <<< "$(ssh -o StrictHostKeyChecking=no -i ~/jepsen-bot $JEPSEN_USER@$worker 'sudo /tmp/rabbitmq-server/sbin/rabbitmqctl list_queues --silent --formatter csv name,messages | tail -n +2')"
+    done <<< "$(ssh -o StrictHostKeyChecking=no -i jepsen-bot $JEPSEN_USER@$CONTROLLER_IP "ssh -o StrictHostKeyChecking=no -i ~/jepsen-bot $JEPSEN_USER@$worker 'sudo /tmp/rabbitmq-server/sbin/rabbitmqctl list_queues --silent --formatter csv name,messages | tail -n +2'")"
 	done
     ssh -o StrictHostKeyChecking=no -i jepsen-bot $JEPSEN_USER@$CONTROLLER_IP "$SOURCE_AND_CD ; head -n 50 store/current/jepsen.log"
     ssh -o StrictHostKeyChecking=no -i jepsen-bot $JEPSEN_USER@$CONTROLLER_IP "$SOURCE_AND_CD ; tail -n 100 store/current/jepsen.log"
