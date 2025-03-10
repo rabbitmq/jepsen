@@ -46,8 +46,8 @@ public class UtilsTest {
 
     List<Utils.Client> clients = new ArrayList<>(clientCount);
     for (int i = 0; i < clientCount; i++) {
-      Utils.Client client = clientClass.getConstructor(String.class, boolean.class)
-          .newInstance("localhost", deadLetterMode);
+      Utils.Client client = clientClass.getConstructor(String.class, boolean.class, int.class)
+          .newInstance("localhost", deadLetterMode, 3);
       clients.add(new LoggingClient(client));
       client.setup();
     }

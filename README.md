@@ -2,7 +2,7 @@
 
 ## How to run with Docker
 
-`cd` into the `jepsen/docker` directory and start the containers:
+`cd` into the `docker` directory and start the containers:
 
 ```shell
 cd docker
