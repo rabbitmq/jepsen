@@ -17,7 +17,7 @@ on:
         required: true
         type: boolean
   repository_dispatch:
-    types: [new_alpha_40, new_alpha_41, new_alpha_42]
+    types: [new_alpha_41, new_alpha_42]
 
 concurrency:
   group: ${{ inputs.concurrency_group != '' && inputs.concurrency_group || github.event.action }}
