@@ -33,7 +33,7 @@ jobs:
     outputs:
       allow_execution: ${{ steps.check.outputs.allow_execution }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Check last execution
         id: check
         run: ci/check-last-execution.sh
@@ -50,7 +50,7 @@ jobs:
     container:
       image: pivotalrabbitmq/jepsen
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Check binary signature
         run: |
           curl -L https://github.com/rabbitmq/signing-keys/releases/download/3.0/rabbitmq-release-signing-key.asc --output rabbitmq-release-signing-key.asc
