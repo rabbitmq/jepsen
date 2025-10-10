@@ -8,7 +8,7 @@
 ## the License for the specific language governing rights and
 ## limitations under the License.
 #
-# Copyright (c) 2023-2024 Broadcom. All Rights Reserved. The term Broadcom refers to Broadcom Inc. and/or its subsidiaries.
+# Copyright (c) 2023-2025 Broadcom. All Rights Reserved. The term Broadcom refers to Broadcom Inc. and/or its subsidiaries.
 
 FROM debian:bullseye
 
@@ -32,7 +32,7 @@ RUN echo 'deb http://ppa1.novemberain.com/rabbitmq/rabbitmq-erlang/deb/debian bu
 # used for all erlang* packages. Without this, apt-get(1) would try to
 # install dependencies using the latest version. This would conflict
 # with the strict pinning in all packages, and thus fail.
-RUN ERLANG_VERSION=1:26* && \
+RUN ERLANG_VERSION=1:27* && \
     echo 'Package: erlang*' > /etc/apt/preferences.d/erlang && \
     echo "Pin: version $ERLANG_VERSION" >> /etc/apt/preferences.d/erlang && \
     echo 'Pin-Priority: 1000' >> /etc/apt/preferences.d/erlang
