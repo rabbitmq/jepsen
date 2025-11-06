@@ -3,12 +3,12 @@ on:
   workflow_dispatch:
     inputs:
       binary_url:
-        description: 'URL of the generic Unix package (e.g. https://github.com/rabbitmq/server-packages/releases/download/alphas.1731926502914/rabbitmq-server-generic-unix-4.1.0-alpha.047cc5a0.tar.xz)'
+        description: 'URL of the generic Unix package (e.g. https://github.com/rabbitmq/server-packages/releases/download/alphas.1762356935031/rabbitmq-server-generic-unix-4.3.0-alpha.fd044249.tar.xz)'
         required: true
         type: string
       concurrency_group:
-        description: 'Concurrency group to avoid concurrent runs (e.g. new_alpha_41)'
-        default: 'new_alpha_41'
+        description: 'Concurrency group to avoid concurrent runs (e.g. new_alpha_43)'
+        default: 'new_alpha_43'
         required: true
         type: string
       skip_check:
@@ -17,7 +17,7 @@ on:
         required: true
         type: boolean
   repository_dispatch:
-    types: [new_alpha_41, new_alpha_42]
+    types: [new_alpha_42, new_alpha_43]
 
 concurrency:
   group: ${{ inputs.concurrency_group != '' && inputs.concurrency_group || github.event.action }}
