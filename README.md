@@ -17,7 +17,7 @@ Connect to the Jepsen control container:
 docker exec -it jepsen-control bash
 ```
 
-Inside the control container, `cd` into the test directory and list the test aavailable options:
+Inside the control container, `cd` into the test directory and list the test available options:
 
 
 ```
