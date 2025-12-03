@@ -22,11 +22,13 @@ RUN apt-get clean && \
       ca-certificates \
       apt-transport-https \
       gnupg \
-      wget
+      wget \
+      curl
 
 # Our own rabbitmq-erlang repository to provision Erlang.
-RUN echo 'deb http://ppa1.novemberain.com/rabbitmq/rabbitmq-erlang/deb/debian bullseye main' > /etc/apt/sources.list.d/rabbitmq-erlang.list && \
-    wget -O- https://dl.cloudsmith.io/public/rabbitmq/rabbitmq-erlang/gpg.E495BB49CC4BBE5B.key | apt-key add -
+RUN echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/com.rabbitmq.team.gpg] https://deb1.rabbitmq.com/rabbitmq-erlang/debian/bullseye bullseye main' >> /etc/apt/sources.list.d/rabbitmq-erlang.list && \
+    echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/com.rabbitmq.team.gpg] https://deb2.rabbitmq.com/rabbitmq-erlang/debian/bullseye bullseye main' >> /etc/apt/sources.list.d/rabbitmq-erlang.list && \
+    curl -1sLf "https://keys.openpgp.org/vks/v1/by-fingerprint/0A9AF2115F4687BD29803A206B73A36E6026DFCA" | gpg --dearmor | tee /usr/share/keyrings/com.rabbitmq.team.gpg > /dev/null
 
 # We need to set an APT preference to make sure $ERLANG_VERSION is
 # used for all erlang* packages. Without this, apt-get(1) would try to
@@ -35,12 +37,12 @@ RUN echo 'deb http://ppa1.novemberain.com/rabbitmq/rabbitmq-erlang/deb/debian bu
 RUN ERLANG_VERSION=1:27* && \
     echo 'Package: erlang*' > /etc/apt/preferences.d/erlang && \
     echo "Pin: version $ERLANG_VERSION" >> /etc/apt/preferences.d/erlang && \
-    echo 'Pin-Priority: 1000' >> /etc/apt/preferences.d/erlang
+    echo 'Pin-Priority: 1001' >> /etc/apt/preferences.d/erlang
 
 # install a few utilities
 RUN apt-get update && \
     apt-get install -y -V --fix-missing --no-install-recommends \
-    openssh-client curl unzip lsb-release \
+    openssh-client unzip lsb-release \
     erlang-nox \
     erlang-dev \
     erlang-common-test \
