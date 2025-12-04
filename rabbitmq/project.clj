@@ -9,7 +9,7 @@
   :jvm-opts ["-Dcom.sun.management.jmxremote"]
   :dependencies [[org.clojure/clojure "1.12.3"]
                  [jepsen "0.3.10"]
-                 [com.rabbitmq/amqp-client "5.26.0"
+                 [com.rabbitmq/amqp-client "5.28.0"
                   :exclusions [org.slf4j/slf4j-api]]
                  ]
   :exclusions [org.slf4j/log4j-over-slf4j
