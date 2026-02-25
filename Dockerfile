@@ -13,7 +13,7 @@
 FROM debian:bullseye
 
 ENV LANG='C.UTF-8'
-ENV TERRAFORM_VERSION='1.14.5'
+ENV TERRAFORM_VERSION='1.14.6'
 
 RUN apt-get clean && \
     apt-get update && \
