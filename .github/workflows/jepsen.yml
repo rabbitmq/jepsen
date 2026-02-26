@@ -39,7 +39,7 @@ jobs:
         run: ci/check-last-execution.sh
         env:
           GH_TOKEN: ${{ github.token }}
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ env.LAST_EXECUTION_ARTIFACT }}
           path: last-execution.txt
