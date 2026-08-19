@@ -8,12 +8,12 @@
 ## the License for the specific language governing rights and
 ## limitations under the License.
 #
-# Copyright (c) 2023-2025 Broadcom. All Rights Reserved. The term Broadcom refers to Broadcom Inc. and/or its subsidiaries.
+# Copyright (c) 2023-2026 Broadcom. All Rights Reserved. The term Broadcom refers to Broadcom Inc. and/or its subsidiaries.
 
 FROM debian:bullseye
 
 ENV LANG='C.UTF-8'
-ENV TERRAFORM_VERSION='1.15.8'
+ENV TERRAFORM_VERSION='1.15.9'
 
 RUN apt-get clean && \
     apt-get update && \
