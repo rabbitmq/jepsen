@@ -10,7 +10,7 @@
 #
 # Copyright (c) 2023-2026 Broadcom. All Rights Reserved. The term Broadcom refers to Broadcom Inc. and/or its subsidiaries.
 
-FROM debian:bullseye
+FROM debian:trixie
 
 ENV LANG='C.UTF-8'
 ENV TERRAFORM_VERSION='1.16.3'
@@ -26,8 +26,8 @@ RUN apt-get clean && \
       curl
 
 # Our own rabbitmq-erlang repository to provision Erlang.
-RUN echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/com.rabbitmq.team.gpg] https://deb1.rabbitmq.com/rabbitmq-erlang/debian/bullseye bullseye main' >> /etc/apt/sources.list.d/rabbitmq-erlang.list && \
-    echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/com.rabbitmq.team.gpg] https://deb2.rabbitmq.com/rabbitmq-erlang/debian/bullseye bullseye main' >> /etc/apt/sources.list.d/rabbitmq-erlang.list && \
+RUN echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/com.rabbitmq.team.gpg] https://deb1.rabbitmq.com/rabbitmq-erlang/debian/trixie trixie main' >> /etc/apt/sources.list.d/rabbitmq-erlang.list && \
+    echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/com.rabbitmq.team.gpg] https://deb2.rabbitmq.com/rabbitmq-erlang/debian/trixie trixie main' >> /etc/apt/sources.list.d/rabbitmq-erlang.list && \
     curl -1sLf "https://keys.openpgp.org/vks/v1/by-fingerprint/0A9AF2115F4687BD29803A206B73A36E6026DFCA" | gpg --dearmor | tee /usr/share/keyrings/com.rabbitmq.team.gpg > /dev/null
 
 # We need to set an APT preference to make sure $ERLANG_VERSION is
