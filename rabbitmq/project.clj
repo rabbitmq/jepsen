@@ -7,9 +7,9 @@
   :source-paths ["src/main/clojure"]
   :java-source-paths ["src/main/java"]
   :jvm-opts ["-Dcom.sun.management.jmxremote"]
-  :dependencies [[org.clojure/clojure "1.12.5"]
-                 [jepsen "0.3.13"]
-                 [com.rabbitmq/amqp-client "5.34.0"
+  :dependencies [[org.clojure/clojure "1.12.6"]
+                 [jepsen "0.3.14"]
+                 [com.rabbitmq/amqp-client "5.36.0"
                   :exclusions [org.slf4j/slf4j-api]]
                  ]
   :exclusions [org.slf4j/log4j-over-slf4j
