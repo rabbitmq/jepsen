@@ -13,7 +13,7 @@
 FROM debian:trixie
 
 ENV LANG='C.UTF-8'
-ENV TERRAFORM_VERSION='1.16.5'
+ENV TERRAFORM_VERSION='1.16.6'
 
 RUN apt-get clean && \
     apt-get update && \
